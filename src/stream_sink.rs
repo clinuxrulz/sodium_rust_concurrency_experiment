@@ -27,9 +27,9 @@ impl<A> StreamSink<A> {
                     let l = self.stream.data.lock();
                     let n: &StreamData<A> = l.as_ref().unwrap();
                     node = n.node.clone();
-                    node.with_data(|data2: &mut NodeData| { data2.dirty = true });
+                    node.with_data(|data2: &mut NodeData| { data2.changed = true });
                 }
-                data.dirty_nodes.push(node);
+                data.changed_nodes.push(node);
             });
         });
     }

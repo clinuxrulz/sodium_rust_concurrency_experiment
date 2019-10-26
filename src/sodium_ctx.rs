@@ -8,7 +8,7 @@ pub struct SodiumCtx {
 }
 
 pub struct SodiumCtxData {
-    pub dirty_nodes: Vec<Node>,
+    pub changed_nodes: Vec<Node>,
     pub transaction_depth: u32,
     pub post: Vec<Box<dyn FnMut()>>
 }
@@ -19,7 +19,7 @@ impl SodiumCtx {
             data:
                 Arc::new(Mutex::new(
                     SodiumCtxData {
-                        dirty_nodes: Vec::new(),
+                        changed_nodes: Vec::new(),
                         transaction_depth: 0,
                         post: Vec::new()
                     }

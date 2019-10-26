@@ -14,7 +14,7 @@ pub struct WeakNode {
 
 pub struct NodeData {
     pub visited: bool,
-    pub dirty: bool,
+    pub changed: bool,
     pub update: Box<dyn FnMut()>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>
@@ -28,7 +28,7 @@ impl Node {
                     Arc::new(Mutex::new(
                         NodeData {
                             visited: false,
-                            dirty: false,
+                            changed: false,
                             update: Box::new(update),
                             dependencies: dependencies.clone(),
                             dependents: Vec::new()

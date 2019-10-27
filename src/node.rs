@@ -43,6 +43,12 @@ impl Node {
         return result;
     }
 
+    pub fn downgrade(this: &Self) -> WeakNode {
+        WeakNode {
+            data: Arc::downgrade(&this.data)
+        }
+    }
+
     pub fn add_dependency(&self, dependency: Node) {
         self.with_data(|data: &mut NodeData| {
             data.dependencies.push(dependency);
@@ -59,5 +65,11 @@ impl Node {
         let mut l = self.data.lock();
         let data: &mut NodeData = l.as_mut().unwrap();
         k(data)
+    }
+}
+
+impl WeakNode {
+    pub fn upgrade(&self) -> Option<Node> {
+        self.data.upgrade().map(|data| Node { data })
     }
 }

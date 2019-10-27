@@ -55,6 +55,12 @@ impl SodiumCtx {
         }
         return result;
     }
+    
+    pub fn post<K:FnMut()+Send+'static>(&self, k:K) {
+        self.with_data(|data: &mut SodiumCtxData| {
+            data.post.push(Box::new(k));
+        });
+    }
 
     pub fn with_data<R,K:FnOnce(&mut SodiumCtxData)->R>(&self, k: K) -> R {
         let mut l = self.data.lock();
@@ -77,6 +83,16 @@ impl SodiumCtx {
                 self.update_node(&node);
             }
         }
+        // post
+        let mut post =
+            self.with_data(|data: &mut SodiumCtxData| {
+                let mut post: Vec<Box<dyn FnMut()+Send>> = Vec::new();
+                mem::swap(&mut post, &mut data.post);
+                return post;
+            });
+        for mut k in post {
+            k();
+        }
     }
 
     pub fn update_node(&self, node: &Node) {
@@ -85,6 +101,12 @@ impl SodiumCtx {
                 data.visited = true;
                 data.dependencies.clone()
             });
+        {
+            let node = node.clone();
+            self.post(move || {
+                node.with_data(|data: &mut NodeData| data.visited = false);
+            });
+        }
         // visit dependencies
         let handle;
         {
@@ -115,6 +137,23 @@ impl SodiumCtx {
             node.with_data(|data: &mut NodeData| {
                 mem::swap(&mut update, &mut data.update);
             });
+            // if self changed then update dependents
+            let dependents = node.with_data(|data: &mut NodeData| {
+                data.dependents.clone()
+            });
+            let handle;
+            {
+                let dependents = dependents.clone();
+                let _self = self.clone();
+                handle = thread::spawn(move || {
+                    for dependent in dependents {
+                        if let Some(dependent2) = dependent.upgrade() {
+                            _self.update_node(&dependent2);
+                        }
+                    }
+                });
+                handle.join().unwrap();
+            }
         }
     }
 }

@@ -10,6 +10,7 @@ pub struct SodiumCtx {
 
 pub struct SodiumCtxData {
     pub changed_nodes: Vec<Node>,
+    pub visited_nodes: Vec<Node>,
     pub transaction_depth: u32,
     pub post: Vec<Box<dyn FnMut()>>
 }
@@ -21,6 +22,7 @@ impl SodiumCtx {
                 Arc::new(Mutex::new(
                     SodiumCtxData {
                         changed_nodes: Vec::new(),
+                        visited_nodes: Vec::new(),
                         transaction_depth: 0,
                         post: Vec::new()
                     }
@@ -75,9 +77,12 @@ impl SodiumCtx {
         }
     }
 
-    pub fn update_node(node: &Node) {
+    pub fn update_node(&self, node: &Node) {
         let dependencies: Vec<Node> =
-            node.with_data(|data: &mut NodeData| data.dependencies.clone());
+            node.with_data(|data: &mut NodeData| {
+                data.visited = true;
+                data.dependencies.clone()
+            });
         // visit dependencies
         for dependency in &dependencies {
             let visit_it = dependency.with_data(|data: &mut NodeData| !data.visited);
@@ -90,9 +95,16 @@ impl SodiumCtx {
             dependencies
                 .iter()
                 .any(|node: &Node| { node.with_data(|data: &mut NodeData| data.changed) });
-        //
+        // if dependencies changed, then execute update on current node
         if any_changed {
-            
+            let mut update: Box<dyn FnMut()> = Box::new(|| {});
+            node.with_data(|data: &mut NodeData| {
+                mem::swap(&mut update, &mut data.update);
+            });
+            update();
+            node.with_data(|data: &mut NodeData| {
+                mem::swap(&mut update, &mut data.update);
+            });
         }
     }
 }

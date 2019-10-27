@@ -1,9 +1,11 @@
+use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::mem;
+use std::thread;
 use crate::node::Node;
 use crate::node::NodeData;
 
+#[derive(Clone)]
 pub struct SodiumCtx {
     data: Arc<Mutex<SodiumCtxData>>
 }
@@ -12,7 +14,7 @@ pub struct SodiumCtxData {
     pub changed_nodes: Vec<Node>,
     pub visited_nodes: Vec<Node>,
     pub transaction_depth: u32,
-    pub post: Vec<Box<dyn FnMut()>>
+    pub post: Vec<Box<dyn FnMut()+Send>>
 }
 
 impl SodiumCtx {
@@ -39,7 +41,7 @@ impl SodiumCtx {
             self.with_data(|data: &mut SodiumCtxData| {
                 data.transaction_depth = data.transaction_depth - 1;
                 if data.transaction_depth == 0 {
-                    let mut post: Vec<Box<dyn FnMut()>> = Vec::new();
+                    let mut post: Vec<Box<dyn FnMut()+Send>> = Vec::new();
                     mem::swap(&mut post, &mut data.post);
                     return Some(post);
                 }
@@ -72,7 +74,7 @@ impl SodiumCtx {
                 break;
             }
             for node in changed_nodes {
-                SodiumCtx::update_node(&node);
+                self.update_node(&node);
             }
         }
     }
@@ -84,12 +86,20 @@ impl SodiumCtx {
                 data.dependencies.clone()
             });
         // visit dependencies
-        for dependency in &dependencies {
-            let visit_it = dependency.with_data(|data: &mut NodeData| !data.visited);
-            if visit_it {
-                SodiumCtx::update_node(dependency);
-            }
+        let handle;
+        {
+            let dependencies = dependencies.clone();
+            let _self = self.clone();
+            handle = thread::spawn(move || {
+                for dependency in &dependencies {
+                    let visit_it = dependency.with_data(|data: &mut NodeData| !data.visited);
+                    if visit_it {
+                        _self.update_node(dependency);
+                    }
+                }
+            });
         }
+        handle.join().unwrap();
         // any dependencies changed?
         let any_changed =
             dependencies
@@ -97,7 +107,7 @@ impl SodiumCtx {
                 .any(|node: &Node| { node.with_data(|data: &mut NodeData| data.changed) });
         // if dependencies changed, then execute update on current node
         if any_changed {
-            let mut update: Box<dyn FnMut()> = Box::new(|| {});
+            let mut update: Box<dyn FnMut()+Send> = Box::new(|| {});
             node.with_data(|data: &mut NodeData| {
                 mem::swap(&mut update, &mut data.update);
             });

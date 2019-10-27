@@ -15,13 +15,13 @@ pub struct WeakNode {
 pub struct NodeData {
     pub visited: bool,
     pub changed: bool,
-    pub update: Box<dyn FnMut()>,
+    pub update: Box<dyn FnMut()+Send>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>
 }
 
 impl Node {
-    pub fn new<UPDATE:FnMut()+'static>(update: UPDATE, dependencies: Vec<Node>) -> Self {
+    pub fn new<UPDATE:FnMut()+Send+'static>(update: UPDATE, dependencies: Vec<Node>) -> Self {
         let result =
             Node {
                 data:

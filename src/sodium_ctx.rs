@@ -37,21 +37,13 @@ impl SodiumCtx {
             data.transaction_depth = data.transaction_depth + 1;
         });
         let result = k();
-        let post_op =
+        let is_end_of_transaction =
             self.with_data(|data: &mut SodiumCtxData| {
                 data.transaction_depth = data.transaction_depth - 1;
-                if data.transaction_depth == 0 {
-                    let mut post: Vec<Box<dyn FnMut()+Send>> = Vec::new();
-                    mem::swap(&mut post, &mut data.post);
-                    return Some(post);
-                }
-                return None;
+                return data.transaction_depth == 0;
             });
-        if let Some(post) = post_op {
+        if is_end_of_transaction {
             self.end_of_transaction();
-            for mut k in post {
-                k();
-            }
         }
         return result;
     }
@@ -69,6 +61,9 @@ impl SodiumCtx {
     }
 
     pub fn end_of_transaction(&self) {
+        self.with_data(|data: &mut SodiumCtxData| {
+            data.transaction_depth = data.transaction_depth + 1;
+        });
         loop {
             let mut changed_nodes: Vec<Node> =
                 self.with_data(|data: &mut SodiumCtxData| {
@@ -83,6 +78,9 @@ impl SodiumCtx {
                 self.update_node(&node);
             }
         }
+        self.with_data(|data: &mut SodiumCtxData| {
+            data.transaction_depth = data.transaction_depth - 1;
+        });
         // post
         let mut post =
             self.with_data(|data: &mut SodiumCtxData| {

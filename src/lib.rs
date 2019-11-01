@@ -1,3 +1,4 @@
+mod listener;
 mod node;
 mod sodium_ctx;
 mod stream;
@@ -5,8 +6,10 @@ mod stream_sink;
 
 #[cfg(test)]
 mod tests {
+    use crate::sodium_ctx::SodiumCtx;
     use crate::node::Node;
     use crate::node::NodeData;
+    use crate::stream_sink::StreamSink;
 
     #[test]
     fn node() {
@@ -17,6 +20,14 @@ mod tests {
         node4.remove_dependency(&node3);
         //node4.with_data(|data: &mut NodeData| {
         //});
+    }
+
+    #[test]
+    fn stream_sink() {
+        let sodium_ctx = SodiumCtx::new();
+        let s = StreamSink::new();
+        s.send(&sodium_ctx, 1);
+        s.send(&sodium_ctx, 2);
     }
 
     #[test]

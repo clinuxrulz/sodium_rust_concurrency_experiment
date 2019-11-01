@@ -1,5 +1,3 @@
-use std::sync::Arc;
-use std::sync::Mutex;
 use crate::node::Node;
 use crate::node::NodeData;
 use crate::stream::Stream;
@@ -12,11 +10,15 @@ pub struct StreamSink<A> {
     stream: Stream<A>
 }
 
-impl<A> StreamSink<A> {
+impl<A:Send+'static> StreamSink<A> {
     pub fn new() -> StreamSink<A> {
         StreamSink {
             stream: Stream::new()
         }
+    }
+
+    pub fn to_stream(&self) -> Stream<A> {
+        self.stream.clone()
     }
 
     pub fn send(&self, sodium_ctx: &SodiumCtx, a: A) {

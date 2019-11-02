@@ -49,7 +49,7 @@ impl SodiumCtx {
         return result;
     }
 
-    pub fn add_dependents_to_changed_node(&self, node: Node) {
+    pub fn add_dependents_to_changed_nodes(&self, node: Node) {
         self.with_data(|data: &mut SodiumCtxData| {
             node.with_data(|data2: &mut NodeData| {
                 data2.dependents

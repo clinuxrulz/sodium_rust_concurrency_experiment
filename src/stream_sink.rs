@@ -24,7 +24,7 @@ impl<A:Send+'static> StreamSink<A> {
 
     pub fn send(&self, sodium_ctx: &SodiumCtx, a: A) {
         sodium_ctx.transaction(|| {
-            sodium_ctx.add_dependents_to_changed_node(self.stream.node());
+            sodium_ctx.add_dependents_to_changed_nodes(self.stream.node());
             self.stream.with_data(|data: &mut StreamData<A>| {
                 data.firing_op = Some(a);
                 data.node.with_data(|data: &mut NodeData| {

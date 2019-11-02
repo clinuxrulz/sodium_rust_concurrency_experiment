@@ -1,3 +1,5 @@
+use crate::sodium_ctx::SodiumCtx;
+
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
@@ -15,13 +17,13 @@ pub struct WeakNode {
 pub struct NodeData {
     pub visited: bool,
     pub changed: bool,
-    pub update: Box<dyn FnMut()+Send>,
+    pub update: Box<dyn FnMut(&SodiumCtx)+Send>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>
 }
 
 impl Node {
-    pub fn new<UPDATE:FnMut()+Send+'static>(update: UPDATE, dependencies: Vec<Node>) -> Self {
+    pub fn new<UPDATE:FnMut(&SodiumCtx)+Send+'static>(update: UPDATE, dependencies: Vec<Node>) -> Self {
         let result =
             Node {
                 data:

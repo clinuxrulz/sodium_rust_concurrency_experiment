@@ -7,20 +7,7 @@ mod stream_sink;
 #[cfg(test)]
 mod tests {
     use crate::sodium_ctx::SodiumCtx;
-    use crate::node::Node;
-    use crate::node::NodeData;
     use crate::stream_sink::StreamSink;
-
-    #[test]
-    fn node() {
-        let node1 = Node::new(|| {}, vec![]);
-        let node2 = Node::new(|| {}, vec![node1.clone()]);
-        let node3 = Node::new(|| {}, vec![node1]);
-        let node4 = Node::new(|| {}, vec![node2, node3.clone()]);
-        node4.remove_dependency(&node3);
-        //node4.with_data(|data: &mut NodeData| {
-        //});
-    }
 
     #[test]
     fn stream_sink() {

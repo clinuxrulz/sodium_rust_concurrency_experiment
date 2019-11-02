@@ -38,7 +38,7 @@ impl Node {
         for dependency in dependencies {
             let mut l = dependency.data.lock();
             let dependency2: &mut NodeData = l.as_mut().unwrap();
-            dependency2.dependencies.push(result.clone());
+            dependency2.dependents.push(Node::downgrade(&result));
         }
         return result;
     }

@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use std::thread;
 use crate::node::Node;
 use crate::node::NodeData;
+use crate::node::WeakNode;
 
 #[derive(Clone)]
 pub struct SodiumCtx {
@@ -46,6 +47,21 @@ impl SodiumCtx {
             self.end_of_transaction();
         }
         return result;
+    }
+
+    pub fn add_dependents_to_changed_node(&self, node: Node) {
+        self.with_data(|data: &mut SodiumCtxData| {
+            node.with_data(|data2: &mut NodeData| {
+                data2.dependents
+                    .iter()
+                    .flat_map(|node: &WeakNode| {
+                        node.upgrade()
+                    })
+                    .for_each(|node: Node| {
+                        data.changed_nodes.push(node);
+                    });
+            });
+        });
     }
     
     pub fn post<K:FnMut()+Send+'static>(&self, k:K) {

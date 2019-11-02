@@ -24,28 +24,12 @@ impl<A:Send+'static> StreamSink<A> {
 
     pub fn send(&self, sodium_ctx: &SodiumCtx, a: A) {
         sodium_ctx.transaction(|| {
-            sodium_ctx.with_data(|data: &mut SodiumCtxData| {
-                let dependents: Vec<Node> = self.stream.with_data(|data: &mut StreamData<A>| {
-                    data.node.with_data(|data: &mut NodeData| {
-                        data.dependents
-                            .iter()
-                            .flat_map(|node: &WeakNode| {
-                                node.upgrade()
-                            })
-                            .collect()
-                    })
+            sodium_ctx.add_dependents_to_changed_node(self.stream.node());
+            self.stream.with_data(|data: &mut StreamData<A>| {
+                data.firing_op = Some(a);
+                data.node.with_data(|data: &mut NodeData| {
+                    data.changed = true;
                 });
-                let node: Node;
-                {
-                    let mut l = self.stream.data.lock();
-                    let n: &mut StreamData<A> = l.as_mut().unwrap();
-                    node = n.node.clone();
-                    node.with_data(|data2: &mut NodeData| { data2.changed = true });
-                    n.firing_op = Some(a);
-                }
-                for dependent in dependents {
-                    data.changed_nodes.push(dependent);
-                }
             });
             {
                 let stream = self.stream.clone();

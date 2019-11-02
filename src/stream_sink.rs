@@ -37,15 +37,27 @@ impl<A:Send+'static> StreamSink<A> {
                 });
                 let node: Node;
                 {
-                    let l = self.stream.data.lock();
-                    let n: &StreamData<A> = l.as_ref().unwrap();
+                    let mut l = self.stream.data.lock();
+                    let n: &mut StreamData<A> = l.as_mut().unwrap();
                     node = n.node.clone();
                     node.with_data(|data2: &mut NodeData| { data2.changed = true });
+                    n.firing_op = Some(a);
                 }
                 for dependent in dependents {
                     data.changed_nodes.push(dependent);
                 }
             });
+            {
+                let stream = self.stream.clone();
+                sodium_ctx.post(move || {
+                    stream.with_data(|data: &mut StreamData<A>| {
+                        data.firing_op = None;
+                        data.node.with_data(|data: &mut NodeData| {
+                            data.changed = false;
+                        });
+                    });
+                });
+            }
         });
     }
 }

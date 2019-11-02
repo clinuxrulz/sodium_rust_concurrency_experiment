@@ -64,7 +64,7 @@ impl<A:Send+'static> Stream<A> {
                 })
             });
         });
-        s;
+        s
     }
 
     pub fn listen<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener {

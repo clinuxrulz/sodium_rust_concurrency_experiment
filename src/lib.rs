@@ -1,3 +1,4 @@
+mod cell;
 mod listener;
 mod node;
 mod sodium_ctx;

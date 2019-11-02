@@ -1,9 +1,11 @@
-use std::sync::Arc;
-use std::sync::Mutex;
 use crate::node::Node;
 use crate::node::NodeData;
 use crate::listener::Listener;
 use crate::sodium_ctx::SodiumCtx;
+
+use std::mem;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 pub struct Stream<A> {
     pub data: Arc<Mutex<StreamData<A>>>
@@ -19,17 +21,58 @@ impl<A> Clone for Stream<A> {
 
 pub struct StreamData<A> {
     pub firing_op: Option<A>,
-    pub node: Node
+    pub node: Node,
+    pub sodium_ctx: SodiumCtx
 }
 
 impl<A:Send+'static> Stream<A> {
-    pub fn new() -> Stream<A> {
+    pub fn new(sodium_ctx: &SodiumCtx) -> Stream<A> {
         Stream {
             data: Arc::new(Mutex::new(StreamData {
                 firing_op: None,
-                node: Node::new(|_: &SodiumCtx| {}, Vec::new())
-            }))
+                node: sodium_ctx.null_node(),
+                sodium_ctx: sodium_ctx.clone()
+            })),
         }
+    }
+
+    pub fn _new<MK_NODE:FnOnce(&Stream<A>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MK_NODE) -> Stream<A> {
+        let s = Stream {
+            data: Arc::new(Mutex::new(StreamData {
+                firing_op: None,
+                node: sodium_ctx.null_node(),
+                sodium_ctx: sodium_ctx.clone()
+            }))
+        };
+        let node = mk_node(&s);
+        s.with_data(|data: &mut StreamData<A>| data.node = node.clone());
+        let mut update: Box<dyn FnMut()+Send> = Box::new(|| {});
+        node.with_data(|data: &mut NodeData| {
+            mem::swap(&mut update, &mut data.update);
+        });
+        update();
+        node.with_data(|data: &mut NodeData| {
+            mem::swap(&mut update, &mut data.update);
+        });
+        let is_firing =
+            s.with_data(|data: &mut StreamData<A>| {
+                if data.firing_op.is_some() {
+                    data.node.with_data(|data: &mut NodeData| data.changed = true);
+                    true
+                } else {
+                    false
+                }
+            });
+        if is_firing {
+            let s = s.clone();
+            sodium_ctx.post(move || {
+                s.with_data(|data: &mut StreamData<A>| {
+                    data.firing_op = None;
+                    data.node.with_data(|data: &mut NodeData| data.changed = false)
+                })
+            });
+        }
+        s
     }
 
     pub fn with_firing_op<R,K:FnOnce(&mut Option<A>)->R>(&self, k: K) -> R {
@@ -40,60 +83,71 @@ impl<A:Send+'static> Stream<A> {
         self.with_data(|data: &mut StreamData<A>| data.node.clone())
     }
 
+    pub fn sodium_ctx(&self) -> SodiumCtx {
+        self.with_data(|data: &mut StreamData<A>| data.sodium_ctx.clone())
+    }
+
     pub fn map<B:Send+'static,FN:FnMut(&A)->B+Send+'static>(&self, mut f: FN) -> Stream<B> {
-        let s = Stream {
-            data: Arc::new(Mutex::new(StreamData {
-                firing_op: self.with_firing_op(|firing_op: &mut Option<A>| {
-                    if let Some(ref firing) = firing_op {
-                        return Some(f(firing));
-                    } else {
-                        return None;
-                    }
-                }),
-                node: Node::new(|_:&SodiumCtx| {}, vec![self.node()])
-            }))
-        };
-        s.node().with_data(|data: &mut NodeData| {
-            let _self = self.clone();
-            let _s = s.clone();
-            data.update = Box::new(move |sodium_ctx: &SodiumCtx| {
-                _self.with_firing_op(|firing_op: &mut Option<A>| {
-                    if let Some(ref firing) = firing_op {
-                        _s._send(sodium_ctx, f(firing));
-                    }
-                })
-            });
-        });
-        s
+        let _self = self.clone();
+        let sodium_ctx = self.sodium_ctx().clone();
+        Stream::_new(
+            &sodium_ctx,
+            |s: &Stream<B>| {
+                let _s = s.clone();
+                let sodium_ctx = self.sodium_ctx().clone();
+                Node::new(
+                    move || {
+                        _self.with_firing_op(|firing_op: &mut Option<A>| {
+                            if let Some(ref firing) = firing_op {
+                                _s._send(&sodium_ctx, f(firing));
+                            }
+                        })
+                    },
+                    vec![self.node()]
+                )
+            }
+        )
     }
 
     pub fn filter<PRED:FnMut(&A)->bool+Send+'static>(&self, mut pred: PRED) -> Stream<A> where A: Clone {
+        let _self = self.clone();
+        let sodium_ctx = self.sodium_ctx().clone();
+        Stream::_new(
+            &sodium_ctx,
+            |s: &Stream<A>| {
+                let _s = s.clone();
+                let sodium_ctx = self.sodium_ctx().clone();
+                Node::new(
+                    move || {
+                        _self.with_firing_op(|firing_op: &mut Option<A>| {
+                            let firing_op2 = firing_op.clone().filter(|firing| pred(firing));
+                            if let Some(firing) = firing_op2 {
+                                _s._send(&sodium_ctx, firing);
+                            }
+                        });
+                    },
+                    vec![self.node()]
+                )
+            }
+        )
+    }
+
+    /*
+    pub fn merge<FN:FnMut(&A,&A)->A>(&self, s: &Stream<A>, f: FN) -> Stream<A> where A: Clone {
         let s = Stream {
             data: Arc::new(Mutex::new(StreamData {
-                firing_op: self.with_firing_op(|firing_op: &mut Option<A>| firing_op.clone().filter(|firing| pred(firing))),
-                node: Node::new(|_:&SodiumCtx| {}, vec![self.node()])
+                firing_op: None,
+
             }))
         };
-        s.node().with_data(|data: &mut NodeData| {
-            let _self = self.clone();
-            let _s = s.clone();
-            data.update = Box::new(move |sodium_ctx: &SodiumCtx| {
-                _self.with_firing_op(|firing_op: &mut Option<A>| {
-                    let firing_op2 = firing_op.clone().filter(|firing| pred(firing));
-                    if let Some(firing) = firing_op2 {
-                        _s._send(sodium_ctx, firing);
-                    }
-                })
-            });
-        });
-        s
     }
+    */
 
     pub fn listen<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener {
         let self_ = self.clone();
         let node =
             Node::new(
-                move |_: &SodiumCtx| {
+                move || {
                     self_.with_data(|data: &mut StreamData<A>| {
                         for firing in &data.firing_op {
                             k(firing)

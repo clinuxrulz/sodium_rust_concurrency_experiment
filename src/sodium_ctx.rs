@@ -12,6 +12,7 @@ pub struct SodiumCtx {
 }
 
 pub struct SodiumCtxData {
+    pub null_node: Node,
     pub changed_nodes: Vec<Node>,
     pub visited_nodes: Vec<Node>,
     pub transaction_depth: u32,
@@ -24,6 +25,7 @@ impl SodiumCtx {
             data:
                 Arc::new(Mutex::new(
                     SodiumCtxData {
+                        null_node: Node::new(|| {}, Vec::new()),
                         changed_nodes: Vec::new(),
                         visited_nodes: Vec::new(),
                         transaction_depth: 0,
@@ -31,6 +33,10 @@ impl SodiumCtx {
                     }
                 ))
         }
+    }
+
+    pub fn null_node(&self) -> Node {
+        self.with_data(|data: &mut SodiumCtxData| data.null_node.clone())
     }
 
     pub fn transaction<R,K:FnOnce()->R>(&self, k:K) -> R {
@@ -143,11 +149,11 @@ impl SodiumCtx {
                 .any(|node: &Node| { node.with_data(|data: &mut NodeData| data.changed) });
         // if dependencies changed, then execute update on current node
         if any_changed {
-            let mut update: Box<dyn FnMut(&SodiumCtx)+Send> = Box::new(|_sodium_ctx: &SodiumCtx| {});
+            let mut update: Box<dyn FnMut()+Send> = Box::new(|| {});
             node.with_data(|data: &mut NodeData| {
                 mem::swap(&mut update, &mut data.update);
             });
-            update(self);
+            update();
             node.with_data(|data: &mut NodeData| {
                 mem::swap(&mut update, &mut data.update);
             });

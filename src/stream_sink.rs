@@ -12,9 +12,9 @@ pub struct StreamSink<A> {
 }
 
 impl<A:Send+'static> StreamSink<A> {
-    pub fn new() -> StreamSink<A> {
+    pub fn new(sodium_ctx: &SodiumCtx) -> StreamSink<A> {
         StreamSink {
-            stream: Stream::new()
+            stream: Stream::new(sodium_ctx)
         }
     }
 

@@ -12,7 +12,7 @@ mod tests {
     #[test]
     fn stream_sink() {
         let sodium_ctx = SodiumCtx::new();
-        let s : StreamSink<i32> = StreamSink::new();
+        let s : StreamSink<i32> = StreamSink::new(&sodium_ctx);
         let l = s.to_stream().listen(|a: &i32| {
             println!("{}", a);
         });
@@ -23,7 +23,7 @@ mod tests {
     #[test]
     fn stream_map() {
         let sodium_ctx = SodiumCtx::new();
-        let s : StreamSink<i32> = StreamSink::new();
+        let s : StreamSink<i32> = StreamSink::new(&sodium_ctx);
         let s2 = s.to_stream().map(|a: &i32| a * 2);
         let _l = s2.listen(|a: &i32| {
             println!("{}", a);
@@ -35,7 +35,7 @@ mod tests {
     #[test]
     fn stream_filter() {
         let sodium_ctx = SodiumCtx::new();
-        let s : StreamSink<i32> = StreamSink::new();
+        let s : StreamSink<i32> = StreamSink::new(&sodium_ctx);
         let s2 = s.to_stream().filter(|a| a & 1 == 0);
         let _l = s2.listen(|a: &i32| {
             println!("{}", a);

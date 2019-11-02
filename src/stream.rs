@@ -67,6 +67,28 @@ impl<A:Send+'static> Stream<A> {
         s
     }
 
+    pub fn filter<PRED:FnMut(&A)->bool+Send+'static>(&self, mut pred: PRED) -> Stream<A> where A: Clone {
+        let s = Stream {
+            data: Arc::new(Mutex::new(StreamData {
+                firing_op: self.with_firing_op(|firing_op: &mut Option<A>| firing_op.clone().filter(|firing| pred(firing))),
+                node: Node::new(|_:&SodiumCtx| {}, vec![self.node()])
+            }))
+        };
+        s.node().with_data(|data: &mut NodeData| {
+            let _self = self.clone();
+            let _s = s.clone();
+            data.update = Box::new(move |sodium_ctx: &SodiumCtx| {
+                _self.with_firing_op(|firing_op: &mut Option<A>| {
+                    let firing_op2 = firing_op.clone().filter(|firing| pred(firing));
+                    if let Some(firing) = firing_op2 {
+                        _s._send(sodium_ctx, firing);
+                    }
+                })
+            });
+        });
+        s
+    }
+
     pub fn listen<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener {
         let self_ = self.clone();
         let node =

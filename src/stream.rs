@@ -94,7 +94,7 @@ impl<A:Send+'static> Stream<A> {
             &sodium_ctx,
             |s: &Stream<B>| {
                 let _s = s.clone();
-                let sodium_ctx = self.sodium_ctx().clone();
+                let sodium_ctx = sodium_ctx.clone();
                 Node::new(
                     move || {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
@@ -116,7 +116,7 @@ impl<A:Send+'static> Stream<A> {
             &sodium_ctx,
             |s: &Stream<A>| {
                 let _s = s.clone();
-                let sodium_ctx = self.sodium_ctx().clone();
+                let sodium_ctx = sodium_ctx.clone();
                 Node::new(
                     move || {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
@@ -132,16 +132,39 @@ impl<A:Send+'static> Stream<A> {
         )
     }
 
-    /*
-    pub fn merge<FN:FnMut(&A,&A)->A>(&self, s: &Stream<A>, f: FN) -> Stream<A> where A: Clone {
-        let s = Stream {
-            data: Arc::new(Mutex::new(StreamData {
-                firing_op: None,
-
-            }))
-        };
+    pub fn merge<FN:FnMut(&A,&A)->A+Send+'static>(&self, s2: &Stream<A>, mut f: FN) -> Stream<A> where A: Clone {
+        let _self = self.clone();
+        let s2 = s2.clone();
+        let sodium_ctx = self.sodium_ctx().clone();
+        Stream::_new(
+            &sodium_ctx,
+            |s: &Stream<A>| {
+                let _s = s.clone();
+                let _s2 = s2.clone();
+                let sodium_ctx = sodium_ctx.clone();
+                Node::new(
+                    move || {
+                        _self.with_firing_op(|firing1_op: &mut Option<A>| {
+                            _s2.with_firing_op(|firing2_op: &mut Option<A>| {
+                                if let Some(ref firing1) = firing1_op {
+                                    if let Some(ref firing2) = firing2_op {
+                                        _s._send(&sodium_ctx, f(firing1, firing2));
+                                    } else {
+                                        _s._send(&sodium_ctx, firing1.clone());
+                                    }
+                                } else {
+                                    if let Some(ref firing2) = firing2_op {
+                                        _s._send(&sodium_ctx, firing2.clone());
+                                    }
+                                }
+                            })
+                        })
+                    },
+                    vec![self.node(), s2.node()]
+                )
+            }
+        )
     }
-    */
 
     pub fn listen<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener {
         let self_ = self.clone();

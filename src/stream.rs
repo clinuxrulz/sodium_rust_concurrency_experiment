@@ -91,7 +91,6 @@ impl<A:Send+'static> Stream<A> {
 
     pub fn _send(&self, sodium_ctx: &SodiumCtx, a: A) {
         sodium_ctx.transaction(|| {
-            sodium_ctx.add_dependents_to_changed_nodes(self.node());
             let is_first = self.with_data(|data: &mut StreamData<A>| {
                 let is_first = data.firing_op.is_none();
                 data.firing_op = Some(a);

@@ -116,6 +116,10 @@ impl SodiumCtx {
     }
 
     pub fn update_node(&self, node: &Node) {
+        let bail = node.with_data(|data: &mut NodeData| data.visited.clone());
+        if bail {
+            return;
+        }
         let dependencies: Vec<Node> =
             node.with_data(|data: &mut NodeData| {
                 data.visited = true;

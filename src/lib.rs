@@ -45,6 +45,21 @@ mod tests {
     }
 
     #[test]
+    fn stream_merge() {
+        let sodium_ctx = SodiumCtx::new();
+        let s1 : StreamSink<i32> = StreamSink::new(&sodium_ctx);
+        let s2 : StreamSink<i32> = StreamSink::new(&sodium_ctx);
+        let s3 = s1.to_stream().merge(&s2.to_stream(), |a, b| a + b);
+        let _l = s3.listen(|a| println!("{}", a));
+        s1.send(&sodium_ctx, 1);
+        s2.send(&sodium_ctx, 2);
+        sodium_ctx.transaction(|| {
+            s1.send(&sodium_ctx, 1);
+            s2.send(&sodium_ctx, 2);
+        });
+    }
+
+    #[test]
     fn it_works() {
         assert_eq!(2 + 2, 4);
     }

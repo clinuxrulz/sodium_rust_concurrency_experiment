@@ -38,7 +38,7 @@ impl<A:Send+'static> Cell<A> {
         }
     }
 
-    pub fn _new(sodium_ctx: &SodiumCtx, stream: Stream<A>, value: A) -> Cell<A> where A: Copy {
+    pub fn _new(sodium_ctx: &SodiumCtx, stream: Stream<A>, value: A) -> Cell<A> where A: Clone {
         let stream2 = stream.clone();
         let c = Cell {
             data: Arc::new(Mutex::new(CellData {
@@ -110,6 +110,42 @@ impl<A:Send+'static> Cell<A> {
             }
             s1.or_else(&spark)
         })
+    }
+
+    pub fn lift2<B:Send+Clone+'static,C:Send+Clone+'static,FN:FnMut(&A,&B)->C+Send+'static>(&self, cb: &Cell<B>, mut f: FN) -> Cell<C> where A: Clone {
+        let sodium_ctx = self.sodium_ctx();
+        let lhs = self.sample();
+        let rhs = cb.sample();
+        let init = f(&lhs, &rhs);
+        let state: Arc<Mutex<(A,B)>> = Arc::new(Mutex::new((lhs, rhs)));
+        let s1: Stream<()>;
+        let s2: Stream<()>;
+        {
+            let state = state.clone();
+            s1 = self.updates().map(move |a: &A| {
+                let mut l = state.lock();
+                let state2: &mut (A,B) = l.as_mut().unwrap();
+                state2.0 = a.clone();
+            });
+        }
+        {
+            let state = state.clone();
+            s2 = cb.updates().map(move |b: &B| {
+                let mut l = state.lock();
+                let state2: &mut (A,B) = l.as_mut().unwrap();
+                state2.1 = b.clone();
+            });
+        }
+        let s = s1.or_else(&s2).map(move |_: &()| {
+            let l = state.lock();
+            let state2: &(A,B) = l.as_ref().unwrap();
+            f(&state2.0, &state2.1)
+        });
+        Cell::_new(
+            &sodium_ctx,
+            s,
+            init
+        )
     }
 
     pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener where A: Clone {

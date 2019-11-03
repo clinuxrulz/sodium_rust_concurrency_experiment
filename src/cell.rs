@@ -87,6 +87,10 @@ impl<A:Send+'static> Cell<A> {
         self.with_data(|data: &mut CellData<A>| data.stream.sodium_ctx())
     }
 
+    pub fn sample(&self) -> A where A: Clone {
+        self.with_data(|data: &mut CellData<A>| data.value.clone())
+    }
+
     pub fn updates(&self) -> Stream<A> {
         self.with_data(|data| data.stream.clone())
     }

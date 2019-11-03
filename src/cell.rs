@@ -148,6 +148,23 @@ impl<A:Send+'static> Cell<A> {
         )
     }
 
+    pub fn lift3<
+        B:Send+Clone+'static,
+        C:Send+Clone+'static,
+        D:Send+Clone+'static,
+        FN:FnMut(&A,&B,&C)->D+Send+'static
+    >(&self, cb: &Cell<B>, cc: &Cell<C>, mut f: FN) -> Cell<D> where A: Clone {
+        self
+            .lift2(
+                cb,
+                |a: &A, b: &B| (a.clone(), b.clone())
+            )
+            .lift2(
+                cc,
+                move |(ref a, ref b): &(A,B), c: &C| f(a, b, c)
+            )
+    }
+
     pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener where A: Clone {
         self.value().listen_weak(k)
     }

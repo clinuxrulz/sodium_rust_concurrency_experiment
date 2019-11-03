@@ -132,6 +132,10 @@ impl<A:Send+'static> Stream<A> {
         )
     }
 
+    pub fn or_else(&self, s2: &Stream<A>) -> Stream<A> where A: Clone {
+        self.merge(s2, |lhs:&A, rhs:&A| lhs.clone())
+    }
+
     pub fn merge<FN:FnMut(&A,&A)->A+Send+'static>(&self, s2: &Stream<A>, mut f: FN) -> Stream<A> where A: Clone {
         let _self = self.clone();
         let s2 = s2.clone();
@@ -166,7 +170,7 @@ impl<A:Send+'static> Stream<A> {
         )
     }
 
-    pub fn listen<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener {
+    pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener {
         let self_ = self.clone();
         let node =
             Node::new(

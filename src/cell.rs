@@ -1,3 +1,4 @@
+use crate::listener::Listener;
 use crate::node::Node;
 use crate::sodium_ctx::SodiumCtx;
 use crate::stream::Stream;
@@ -80,6 +81,33 @@ impl<A:Send+'static> Cell<A> {
         }
         c.with_data(|data: &mut CellData<A>| data.node = node);
         c
+    }
+
+    pub fn sodium_ctx(&self) -> SodiumCtx {
+        self.with_data(|data: &mut CellData<A>| data.stream.sodium_ctx())
+    }
+
+    pub fn updates(&self) -> Stream<A> {
+        self.with_data(|data| data.stream.clone())
+    }
+
+    pub fn value(&self) -> Stream<A> where A: Clone {
+        let sodium_ctx = self.sodium_ctx();
+        sodium_ctx.transaction(|| {
+            let s1 = self.updates();
+            let spark: Stream<A> = Stream::new(&sodium_ctx);
+            let sodium_ctx2 = sodium_ctx.clone();
+            {
+                let spark = spark.clone();
+                let a: A = self.with_data(|data: &mut CellData<A>| data.value.clone());
+                spark._send(&sodium_ctx2, a);
+            }
+            s1.or_else(&spark)
+        })
+    }
+
+    pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener where A: Clone {
+        self.value().listen_weak(k)
     }
 
     pub fn with_data<R,K:FnOnce(&mut CellData<A>)->R>(&self, k: K) -> R {

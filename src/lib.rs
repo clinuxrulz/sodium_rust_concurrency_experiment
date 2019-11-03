@@ -14,7 +14,7 @@ mod tests {
     fn stream_sink() {
         let sodium_ctx = SodiumCtx::new();
         let s : StreamSink<i32> = StreamSink::new(&sodium_ctx);
-        let l = s.to_stream().listen(|a: &i32| {
+        let l = s.to_stream().listen_weak(|a: &i32| {
             println!("{}", a);
         });
         s.send(&sodium_ctx, 1);
@@ -26,7 +26,7 @@ mod tests {
         let sodium_ctx = SodiumCtx::new();
         let s : StreamSink<i32> = StreamSink::new(&sodium_ctx);
         let s2 = s.to_stream().map(|a: &i32| a * 2);
-        let _l = s2.listen(|a: &i32| {
+        let _l = s2.listen_weak(|a: &i32| {
             println!("{}", a);
         });
         s.send(&sodium_ctx, 1);
@@ -38,7 +38,7 @@ mod tests {
         let sodium_ctx = SodiumCtx::new();
         let s : StreamSink<i32> = StreamSink::new(&sodium_ctx);
         let s2 = s.to_stream().filter(|a| a & 1 == 0);
-        let _l = s2.listen(|a: &i32| {
+        let _l = s2.listen_weak(|a: &i32| {
             println!("{}", a);
         });
         s.send(&sodium_ctx, 1);
@@ -51,7 +51,7 @@ mod tests {
         let s1 : StreamSink<i32> = StreamSink::new(&sodium_ctx);
         let s2 : StreamSink<i32> = StreamSink::new(&sodium_ctx);
         let s3 = s1.to_stream().merge(&s2.to_stream(), |a, b| a + b);
-        let _l = s3.listen(|a| println!("{}", a));
+        let _l = s3.listen_weak(|a| println!("{}", a));
         s1.send(&sodium_ctx, 1);
         s2.send(&sodium_ctx, 2);
         sodium_ctx.transaction(|| {

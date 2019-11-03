@@ -100,7 +100,9 @@ impl<A:Send+'static> Cell<A> {
             {
                 let spark = spark.clone();
                 let a: A = self.with_data(|data: &mut CellData<A>| data.value.clone());
-                spark._send(&sodium_ctx2, a);
+                sodium_ctx.post(move || {
+                    spark._send(&sodium_ctx2, a.clone());
+                });
             }
             s1.or_else(&spark)
         })

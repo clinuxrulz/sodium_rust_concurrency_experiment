@@ -165,6 +165,69 @@ impl<A:Send+'static> Cell<A> {
             )
     }
 
+    pub fn lift4<
+        B:Send+Clone+'static,
+        C:Send+Clone+'static,
+        D:Send+Clone+'static,
+        E:Send+Clone+'static,
+        FN:FnMut(&A,&B,&C,&D)->E+Send+'static
+    >(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, mut f: FN) -> Cell<E> where A: Clone {
+        self
+            .lift3(
+                cb,
+                cc,
+                |a: &A, b: &B, c: &C| (a.clone(), b.clone(), c.clone())
+            )
+            .lift2(
+                cd,
+                move |(ref a, ref b, ref c): &(A,B,C), d: &D| f(a, b, c, d)
+            )
+    }
+
+    pub fn lift5<
+        B:Send+Clone+'static,
+        C:Send+Clone+'static,
+        D:Send+Clone+'static,
+        E:Send+Clone+'static,
+        F:Send+Clone+'static,
+        FN:FnMut(&A,&B,&C,&D,&E)->F+Send+'static
+    >(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, ce: &Cell<E>, mut f: FN) -> Cell<F> where A: Clone {
+        self
+            .lift3(
+                cb,
+                cc,
+                |a: &A, b: &B, c: &C| (a.clone(), b.clone(), c.clone())
+            )
+            .lift3(
+                cd,
+                ce,
+                move |(ref a, ref b, ref c): &(A,B,C), d: &D, e: &E| f(a, b, c, d, e)
+            )
+    }
+
+    pub fn lift6<
+        B:Send+Clone+'static,
+        C:Send+Clone+'static,
+        D:Send+Clone+'static,
+        E:Send+Clone+'static,
+        F:Send+Clone+'static,
+        G:Send+Clone+'static,
+        FN:FnMut(&A,&B,&C,&D,&E,&F)->G+Send+'static
+    >(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, ce: &Cell<E>, cf: &Cell<F>, mut f: FN) -> Cell<G> where A: Clone {
+        self
+            .lift4(
+                cb,
+                cc,
+                cd,
+                |a: &A, b: &B, c: &C, d: &D| (a.clone(), b.clone(), c.clone(), d.clone())
+            )
+            .lift3(
+                ce,
+                cf,
+                move |(ref a, ref b, ref c, ref d): &(A,B,C,D), e: &E, f2: &F| f(a, b, c, d, e, f2)
+            )
+    }
+
     pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener where A: Clone {
         self.value().listen_weak(k)
     }

@@ -1,3 +1,4 @@
+use crate::cell::Cell;
 use crate::node::Node;
 use crate::node::NodeData;
 use crate::listener::Listener;
@@ -85,6 +86,15 @@ impl<A:Send+'static> Stream<A> {
 
     pub fn sodium_ctx(&self) -> SodiumCtx {
         self.with_data(|data: &mut StreamData<A>| data.sodium_ctx.clone())
+    }
+
+    pub fn snapshot<B:Send+Clone+'static,C:Send+'static,FN:FnMut(&A,&B)->C+Send+'static>(&self, cb: &Cell<B>, mut f: FN) -> Stream<C> {
+        let cb = cb.clone();
+        self.map(move |a: &A| f(a, &cb.sample()))
+    }
+
+    pub fn snapshot1<B:Send+Clone+'static>(&self, cb: &Cell<B>) -> Stream<B> {
+        self.snapshot(cb, |a: &A, b: &B| b.clone())
     }
 
     pub fn map<B:Send+'static,FN:FnMut(&A)->B+Send+'static>(&self, mut f: FN) -> Stream<B> {

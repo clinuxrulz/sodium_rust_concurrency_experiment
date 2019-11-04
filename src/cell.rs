@@ -1,5 +1,6 @@
 use crate::listener::Listener;
 use crate::node::Node;
+use crate::node::NodeData;
 use crate::sodium_ctx::SodiumCtx;
 use crate::stream::Stream;
 
@@ -226,6 +227,59 @@ impl<A:Send+'static> Cell<A> {
                 cf,
                 move |(ref a, ref b, ref c, ref d): &(A,B,C,D), e: &E, f2: &F| f(a, b, c, d, e, f2)
             )
+    }
+
+    pub fn switch_s(csa: Cell<Stream<A>>) -> Stream<A> where A: Clone {
+        let sodium_ctx = csa.sodium_ctx();
+        Stream::_new(
+            &sodium_ctx,
+            |sa: &Stream<A>| {
+                let sodium_ctx = sodium_ctx.clone();
+                let mut innerS: Arc<Mutex<Stream<A>>> = Arc::new(Mutex::new(csa.sample()));
+                let sa = sa.clone();
+                let mut node: Node;
+                {
+                    let innerS = innerS.clone();
+                    node = Node::new(
+                        move || {
+                            let l = innerS.lock();
+                            let innerS: &Stream<A> = l.as_ref().unwrap();
+                            innerS.with_firing_op(|firing_op: &mut Option<A>| {
+                                if let Some(ref firing) = firing_op {
+                                    sa._send(&sodium_ctx, firing.clone());
+                                }
+                            });
+                        },
+                        vec![csa.sample().node()]
+                    );
+                }
+                {
+                    let node: Node = node.clone();
+                    let csa2 = csa.clone();
+                    let node2 = Node::new(
+                        move || {
+                            csa.updates().with_firing_op(|firing_op: &mut Option<Stream<A>>| {
+                                if let Some(ref firing) = firing_op {
+                                    let old_deps =
+                                        node.with_data(|data: &mut NodeData| {
+                                            data.dependencies.clone()
+                                        });
+                                    for dep in old_deps {
+                                        node.remove_dependency(&dep);
+                                    }
+                                    node.add_dependency(firing.node());
+                                    let mut l = innerS.lock();
+                                    let innerS: &mut Stream<A> = l.as_mut().unwrap();
+                                    *innerS = firing.clone();
+                                }
+                            });
+                        },
+                        vec![csa2.updates().node()]
+                    );
+                }
+                return node;
+            }
+        )
     }
 
     pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener where A: Clone {

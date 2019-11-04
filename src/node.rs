@@ -53,13 +53,25 @@ impl Node {
 
     pub fn add_dependency(&self, dependency: Node) {
         self.with_data(|data: &mut NodeData| {
-            data.dependencies.push(dependency);
+            data.dependencies.push(dependency.clone());
+        });
+        dependency.with_data(|data: &mut NodeData| {
+            data.dependents.push(Node::downgrade(self));
         });
     }
 
     pub fn remove_dependency(&self, dependency: &Node) {
         self.with_data(|data: &mut NodeData| {
             data.dependencies.retain(|n: &Node| !Arc::ptr_eq(&n.data, &dependency.data));
+        });
+        dependency.with_data(|data: &mut NodeData| {
+            data.dependents.retain(|n: &WeakNode| {
+                if let Some(n) = n.upgrade() {
+                    !Arc::ptr_eq(&n.data, &self.data)
+                } else {
+                    false
+                }
+            })
         });
     }
 

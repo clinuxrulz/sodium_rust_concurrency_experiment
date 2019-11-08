@@ -243,7 +243,8 @@ impl<A:Send+'static> Cell<A> {
             )
     }
 
-    pub fn switch_s(csa: Cell<Stream<A>>) -> Stream<A> where A: Clone {
+    pub fn switch_s(csa: &Cell<Stream<A>>) -> Stream<A> where A: Clone {
+        let csa = csa.clone();
         let sodium_ctx = csa.sodium_ctx();
         Stream::_new(
             &sodium_ctx,
@@ -300,8 +301,8 @@ impl<A:Send+'static> Cell<A> {
         )
     }
 
-    pub fn switch_c(cca: Cell<Cell<A>>) -> Cell<A> where A: Clone {
-        Cell::switch_s(cca.map(|ca: &Cell<A>| ca.updates()))
+    pub fn switch_c(cca: &Cell<Cell<A>>) -> Cell<A> where A: Clone {
+        Cell::switch_s(&cca.map(|ca: &Cell<A>| ca.updates()))
             .or_else(&cca.updates().map(|ca: &Cell<A>| ca.sample()))
             .hold(cca.sample().sample())
     }

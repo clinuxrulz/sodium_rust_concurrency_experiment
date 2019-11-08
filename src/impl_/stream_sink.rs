@@ -1,10 +1,5 @@
-use crate::impl_::node::Node;
-use crate::impl_::node::NodeData;
-use crate::impl_::node::WeakNode;
 use crate::impl_::stream::Stream;
-use crate::impl_::stream::StreamData;
 use crate::impl_::sodium_ctx::SodiumCtx;
-use crate::impl_::sodium_ctx::SodiumCtxData;
 
 #[derive(Clone)]
 pub struct StreamSink<A> {

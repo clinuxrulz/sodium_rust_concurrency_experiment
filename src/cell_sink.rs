@@ -1,0 +1,21 @@
+use crate::impl_::cell_sink::CellSink as CellSinkImpl;
+use crate::sodium_ctx::SodiumCtx;
+use crate::cell::Cell;
+
+pub struct CellSink<A> {
+    pub impl_: CellSinkImpl<A>
+}
+
+impl<A:Clone+Send+'static> CellSink<A> {
+    pub fn new(sodium_ctx: &SodiumCtx, a: A) -> CellSink<A> {
+        CellSink { impl_: CellSinkImpl::new(sodium_ctx, a) }
+    }
+
+    pub fn to_cell(&self) -> Cell<A> {
+        Cell { impl_: self.impl_.to_cell() }
+    }
+
+    pub fn send(&self, a: A) {
+        self.impl_.send(a);
+    }
+}

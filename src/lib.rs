@@ -3,6 +3,7 @@ mod cell;
 mod listener;
 mod sodium_ctx;
 mod stream;
+mod stream_sink;
 
 pub use self::cell::Cell;
 pub use self::impl_::lambda::IsLambda1;
@@ -20,6 +21,7 @@ pub use self::impl_::lambda::lambda5;
 pub use self::impl_::lambda::lambda6;
 pub use self::impl_::node::Node;
 pub use self::stream::Stream;
+pub use self::stream_sink::StreamSink;
 
 #[cfg(test)]
 mod tests {

@@ -88,7 +88,7 @@ impl SodiumCtx {
             data.transaction_depth = data.transaction_depth + 1;
         });
         loop {
-            let mut changed_nodes: Vec<Node> =
+            let changed_nodes: Vec<Node> =
                 self.with_data(|data: &mut SodiumCtxData| {
                     let mut changed_nodes: Vec<Node> = Vec::new();
                     mem::swap(&mut changed_nodes, &mut data.changed_nodes);
@@ -105,7 +105,7 @@ impl SodiumCtx {
             data.transaction_depth = data.transaction_depth - 1;
         });
         // post
-        let mut post =
+        let post =
             self.with_data(|data: &mut SodiumCtxData| {
                 let mut post: Vec<Box<dyn FnMut()+Send>> = Vec::new();
                 mem::swap(&mut post, &mut data.post);

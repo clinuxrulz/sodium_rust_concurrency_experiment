@@ -4,6 +4,7 @@ use crate::node::NodeData;
 use crate::listener::Listener;
 use crate::sodium_ctx::SodiumCtx;
 use crate::lambda::IsLambda1;
+use crate::lambda::IsLambda2;
 
 use std::mem;
 use std::sync::Arc;
@@ -89,16 +90,16 @@ impl<A:Send+'static> Stream<A> {
         self.with_data(|data: &mut StreamData<A>| data.sodium_ctx.clone())
     }
 
-    pub fn snapshot<B:Send+Clone+'static,C:Send+'static,FN:FnMut(&A,&B)->C+Send+'static>(&self, cb: &Cell<B>, mut f: FN) -> Stream<C> {
+    pub fn snapshot<B:Send+Clone+'static,C:Send+'static,FN:IsLambda2<A,B,C>+Send+'static>(&self, cb: &Cell<B>, mut f: FN) -> Stream<C> {
         let cb = cb.clone();
-        self.map(move |a: &A| f(a, &cb.sample()))
+        self.map(move |a: &A| f.call(a, &cb.sample()))
     }
 
     pub fn snapshot1<B:Send+Clone+'static>(&self, cb: &Cell<B>) -> Stream<B> {
         self.snapshot(cb, |a: &A, b: &B| b.clone())
     }
 
-    pub fn map<B:Send+'static,FN:FnMut(&A)->B+Send+'static>(&self, mut f: FN) -> Stream<B> {
+    pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, mut f: FN) -> Stream<B> {
         let _self = self.clone();
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
@@ -120,7 +121,7 @@ impl<A:Send+'static> Stream<A> {
         )
     }
 
-    pub fn filter<PRED:FnMut(&A)->bool+Send+'static>(&self, mut pred: PRED) -> Stream<A> where A: Clone {
+    pub fn filter<PRED:IsLambda1<A,bool>+Send+'static>(&self, mut pred: PRED) -> Stream<A> where A: Clone {
         let _self = self.clone();
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
@@ -131,7 +132,7 @@ impl<A:Send+'static> Stream<A> {
                 Node::new(
                     move || {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
-                            let firing_op2 = firing_op.clone().filter(|firing| pred(firing));
+                            let firing_op2 = firing_op.clone().filter(|firing| pred.call(firing));
                             if let Some(firing) = firing_op2 {
                                 _s._send(&sodium_ctx, firing);
                             }
@@ -147,7 +148,7 @@ impl<A:Send+'static> Stream<A> {
         self.merge(s2, |lhs:&A, rhs:&A| lhs.clone())
     }
 
-    pub fn merge<FN:FnMut(&A,&A)->A+Send+'static>(&self, s2: &Stream<A>, mut f: FN) -> Stream<A> where A: Clone {
+    pub fn merge<FN:IsLambda2<A,A,A>+Send+'static>(&self, s2: &Stream<A>, mut f: FN) -> Stream<A> where A: Clone {
         let _self = self.clone();
         let s2 = s2.clone();
         let sodium_ctx = self.sodium_ctx().clone();
@@ -163,7 +164,7 @@ impl<A:Send+'static> Stream<A> {
                             _s2.with_firing_op(|firing2_op: &mut Option<A>| {
                                 if let Some(ref firing1) = firing1_op {
                                     if let Some(ref firing2) = firing2_op {
-                                        _s._send(&sodium_ctx, f(firing1, firing2));
+                                        _s._send(&sodium_ctx, f.call(firing1, firing2));
                                     } else {
                                         _s._send(&sodium_ctx, firing1.clone());
                                     }
@@ -188,14 +189,14 @@ impl<A:Send+'static> Stream<A> {
         })
     }
 
-    pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener {
+    pub fn listen_weak<K:IsLambda1<A,()>+Send+'static>(&self, mut k: K) -> Listener {
         let self_ = self.clone();
         let node =
             Node::new(
                 move || {
                     self_.with_data(|data: &mut StreamData<A>| {
                         for firing in &data.firing_op {
-                            k(firing)
+                            k.call(firing)
                         }
                     });
                 },

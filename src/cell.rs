@@ -3,6 +3,12 @@ use crate::node::Node;
 use crate::node::NodeData;
 use crate::sodium_ctx::SodiumCtx;
 use crate::stream::Stream;
+use crate::lambda::IsLambda1;
+use crate::lambda::IsLambda2;
+use crate::lambda::IsLambda3;
+use crate::lambda::IsLambda4;
+use crate::lambda::IsLambda5;
+use crate::lambda::IsLambda6;
 
 use std::mem;
 use std::sync::Arc;
@@ -116,16 +122,16 @@ impl<A:Send+'static> Cell<A> {
         })
     }
 
-    pub fn map<B:Send+'static,FN:Fn(&A)->B+Send+'static>(&self, f: FN) -> Cell<B> where A: Clone, B: Clone {
-        let init = f(&self.sample());
+    pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, mut f: FN) -> Cell<B> where A: Clone, B: Clone {
+        let init = f.call(&self.sample());
         self.updates().map(f).hold(init)
     }
 
-    pub fn lift2<B:Send+Clone+'static,C:Send+Clone+'static,FN:FnMut(&A,&B)->C+Send+'static>(&self, cb: &Cell<B>, mut f: FN) -> Cell<C> where A: Clone {
+    pub fn lift2<B:Send+Clone+'static,C:Send+Clone+'static,FN:IsLambda2<A,B,C>+Send+'static>(&self, cb: &Cell<B>, mut f: FN) -> Cell<C> where A: Clone {
         let sodium_ctx = self.sodium_ctx();
         let lhs = self.sample();
         let rhs = cb.sample();
-        let init = f(&lhs, &rhs);
+        let init = f.call(&lhs, &rhs);
         let state: Arc<Mutex<(A,B)>> = Arc::new(Mutex::new((lhs, rhs)));
         let s1: Stream<()>;
         let s2: Stream<()>;
@@ -148,7 +154,7 @@ impl<A:Send+'static> Cell<A> {
         let s = s1.or_else(&s2).map(move |_: &()| {
             let l = state.lock();
             let state2: &(A,B) = l.as_ref().unwrap();
-            f(&state2.0, &state2.1)
+            f.call(&state2.0, &state2.1)
         });
         Cell::_new(
             &sodium_ctx,
@@ -161,7 +167,7 @@ impl<A:Send+'static> Cell<A> {
         B:Send+Clone+'static,
         C:Send+Clone+'static,
         D:Send+Clone+'static,
-        FN:FnMut(&A,&B,&C)->D+Send+'static
+        FN:IsLambda3<A,B,C,D>+Send+'static
     >(&self, cb: &Cell<B>, cc: &Cell<C>, mut f: FN) -> Cell<D> where A: Clone {
         self
             .lift2(
@@ -170,7 +176,7 @@ impl<A:Send+'static> Cell<A> {
             )
             .lift2(
                 cc,
-                move |(ref a, ref b): &(A,B), c: &C| f(a, b, c)
+                move |(ref a, ref b): &(A,B), c: &C| f.call(a, b, c)
             )
     }
 
@@ -179,7 +185,7 @@ impl<A:Send+'static> Cell<A> {
         C:Send+Clone+'static,
         D:Send+Clone+'static,
         E:Send+Clone+'static,
-        FN:FnMut(&A,&B,&C,&D)->E+Send+'static
+        FN:IsLambda4<A,B,C,D,E>+Send+'static
     >(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, mut f: FN) -> Cell<E> where A: Clone {
         self
             .lift3(
@@ -189,7 +195,7 @@ impl<A:Send+'static> Cell<A> {
             )
             .lift2(
                 cd,
-                move |(ref a, ref b, ref c): &(A,B,C), d: &D| f(a, b, c, d)
+                move |(ref a, ref b, ref c): &(A,B,C), d: &D| f.call(a, b, c, d)
             )
     }
 
@@ -199,7 +205,7 @@ impl<A:Send+'static> Cell<A> {
         D:Send+Clone+'static,
         E:Send+Clone+'static,
         F:Send+Clone+'static,
-        FN:FnMut(&A,&B,&C,&D,&E)->F+Send+'static
+        FN:IsLambda5<A,B,C,D,E,F>+Send+'static
     >(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, ce: &Cell<E>, mut f: FN) -> Cell<F> where A: Clone {
         self
             .lift3(
@@ -210,7 +216,7 @@ impl<A:Send+'static> Cell<A> {
             .lift3(
                 cd,
                 ce,
-                move |(ref a, ref b, ref c): &(A,B,C), d: &D, e: &E| f(a, b, c, d, e)
+                move |(ref a, ref b, ref c): &(A,B,C), d: &D, e: &E| f.call(a, b, c, d, e)
             )
     }
 
@@ -221,7 +227,7 @@ impl<A:Send+'static> Cell<A> {
         E:Send+Clone+'static,
         F:Send+Clone+'static,
         G:Send+Clone+'static,
-        FN:FnMut(&A,&B,&C,&D,&E,&F)->G+Send+'static
+        FN:IsLambda6<A,B,C,D,E,F,G>+Send+'static
     >(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, ce: &Cell<E>, cf: &Cell<F>, mut f: FN) -> Cell<G> where A: Clone {
         self
             .lift4(
@@ -233,7 +239,7 @@ impl<A:Send+'static> Cell<A> {
             .lift3(
                 ce,
                 cf,
-                move |(ref a, ref b, ref c, ref d): &(A,B,C,D), e: &E, f2: &F| f(a, b, c, d, e, f2)
+                move |(ref a, ref b, ref c, ref d): &(A,B,C,D), e: &E, f2: &F| f.call(a, b, c, d, e, f2)
             )
     }
 
@@ -295,7 +301,7 @@ impl<A:Send+'static> Cell<A> {
     }
 
     pub fn switch_c(cca: Cell<Cell<A>>) -> Cell<A> where A: Clone {
-        Cell::switch_s(cca.map(|ca| ca.updates()))
+        Cell::switch_s(cca.map(|ca: &Cell<A>| ca.updates()))
             .or_else(&cca.updates().map(|ca: &Cell<A>| ca.sample()))
             .hold(cca.sample().sample())
     }

@@ -40,7 +40,7 @@ mod tests {
     fn stream_filter() {
         let sodium_ctx = SodiumCtx::new();
         let s : StreamSink<i32> = StreamSink::new(&sodium_ctx);
-        let s2 = s.to_stream().filter(|a| a & 1 == 0);
+        let s2 = s.to_stream().filter(|a: &i32| a & 1 == 0);
         let _l = s2.listen_weak(|a: &i32| {
             println!("{}", a);
         });
@@ -53,8 +53,8 @@ mod tests {
         let sodium_ctx = SodiumCtx::new();
         let s1 : StreamSink<i32> = StreamSink::new(&sodium_ctx);
         let s2 : StreamSink<i32> = StreamSink::new(&sodium_ctx);
-        let s3 = s1.to_stream().merge(&s2.to_stream(), |a, b| a + b);
-        let _l = s3.listen_weak(|a| println!("{}", a));
+        let s3 = s1.to_stream().merge(&s2.to_stream(), |a: &i32, b: &i32| a + b);
+        let _l = s3.listen_weak(|a: &i32| println!("{}", a));
         s1.send(1);
         s2.send(2);
         sodium_ctx.transaction(|| {

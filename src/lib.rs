@@ -1,5 +1,6 @@
 mod cell;
 mod cell_sink;
+mod lambda;
 mod listener;
 mod node;
 mod sodium_ctx;

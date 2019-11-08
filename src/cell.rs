@@ -296,7 +296,7 @@ impl<A:Send+'static> Cell<A> {
 
     pub fn switch_c(cca: Cell<Cell<A>>) -> Cell<A> where A: Clone {
         Cell::switch_s(cca.map(|ca| ca.updates()))
-            .or_else(&cca.updates().map(|ca| ca.sample()))
+            .or_else(&cca.updates().map(|ca: &Cell<A>| ca.sample()))
             .hold(cca.sample().sample())
     }
 

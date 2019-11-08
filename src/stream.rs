@@ -3,6 +3,7 @@ use crate::node::Node;
 use crate::node::NodeData;
 use crate::listener::Listener;
 use crate::sodium_ctx::SodiumCtx;
+use crate::lambda::IsLambda1;
 
 use std::mem;
 use std::sync::Arc;
@@ -109,7 +110,7 @@ impl<A:Send+'static> Stream<A> {
                     move || {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
-                                _s._send(&sodium_ctx, f(firing));
+                                _s._send(&sodium_ctx, f.call(firing));
                             }
                         })
                     },

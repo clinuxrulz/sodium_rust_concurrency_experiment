@@ -1,4 +1,4 @@
-use crate::sodium_ctx::SodiumCtx;
+use crate::impl_::sodium_ctx::SodiumCtx;
 
 use std::sync::Arc;
 use std::sync::Mutex;

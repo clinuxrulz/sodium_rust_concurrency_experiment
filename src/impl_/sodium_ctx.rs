@@ -1,10 +1,11 @@
+use crate::impl_::node::Node;
+use crate::impl_::node::NodeData;
+use crate::impl_::node::WeakNode;
+
 use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
-use crate::node::Node;
-use crate::node::NodeData;
-use crate::node::WeakNode;
 
 #[derive(Clone)]
 pub struct SodiumCtx {

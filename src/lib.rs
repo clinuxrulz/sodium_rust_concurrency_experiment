@@ -1,17 +1,10 @@
-mod cell;
-mod cell_sink;
-mod lambda;
-mod listener;
-mod node;
-mod sodium_ctx;
-mod stream;
-mod stream_sink;
+mod impl_;
 
 #[cfg(test)]
 mod tests {
-    use crate::cell_sink::CellSink;
-    use crate::sodium_ctx::SodiumCtx;
-    use crate::stream_sink::StreamSink;
+    use crate::impl_::cell_sink::CellSink;
+    use crate::impl_::sodium_ctx::SodiumCtx;
+    use crate::impl_::stream_sink::StreamSink;
 
     #[test]
     fn stream_sink() {

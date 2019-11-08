@@ -1,6 +1,6 @@
-use crate::cell::Cell;
-use crate::sodium_ctx::SodiumCtx;
-use crate::stream_sink::StreamSink;
+use crate::impl_::cell::Cell;
+use crate::impl_::sodium_ctx::SodiumCtx;
+use crate::impl_::stream_sink::StreamSink;
 
 pub struct CellSink<A> {
     cell: Cell<A>,

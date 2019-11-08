@@ -42,6 +42,10 @@ impl<A:Clone+Send+'static> Stream<A> {
         Stream { impl_: self.impl_.map(f) }
     }
 
+    pub fn map_to<B:Send+Clone+'static>(&self, b: B) -> Stream<B> {
+        self.map(move |_:&A| b.clone())
+    }
+
     pub fn filter<PRED:IsLambda1<A,bool>+Send+'static>(&self, pred: PRED) -> Stream<A> {
         Stream { impl_: self.impl_.filter(pred) }
     }

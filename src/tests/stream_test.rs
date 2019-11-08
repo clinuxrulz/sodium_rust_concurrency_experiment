@@ -39,7 +39,7 @@ fn map() {
     }
     assert_memory_freed(sodium_ctx);
 }
-/*
+
 #[test]
 fn map_to() {
     let mut sodium_ctx = SodiumCtx::new();
@@ -51,21 +51,26 @@ fn map_to() {
         {
             let out = out.clone();
             l =
-                s.map_to(&"fusebox")
+                s.stream().map_to("fusebox")
                     .listen(
-                        move |a|
-                            (*out).borrow_mut().push(*a)
+                        move |a: &&'static str| {
+                            out.lock().as_mut().unwrap().push(*a)
+                        }
                     );
         }
         s.send(&7);
         s.send(&9);
-        assert_eq!(vec!["fusebox", "fusebox"], *(*out).borrow());
+        {
+            let lock = out.lock();
+            let out: &Vec<&'static str> = lock.as_ref().unwrap();
+            assert_eq!(vec!["fusebox", "fusebox"], *out);
+        }
     }
-    l.debug();
     l.unlisten();
     assert_memory_freed(sodium_ctx);
 }
 
+/*
 #[test]
 fn merge_non_simultaneous() {
     let mut sodium_ctx = SodiumCtx::new();

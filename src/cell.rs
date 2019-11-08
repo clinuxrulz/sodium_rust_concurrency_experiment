@@ -116,6 +116,11 @@ impl<A:Send+'static> Cell<A> {
         })
     }
 
+    pub fn map<B:Send+'static,FN:Fn(&A)->B+Send+'static>(&self, f: FN) -> Cell<B> where A: Clone, B: Clone {
+        let init = f(&self.sample());
+        self.updates().map(f).hold(init)
+    }
+
     pub fn lift2<B:Send+Clone+'static,C:Send+Clone+'static,FN:FnMut(&A,&B)->C+Send+'static>(&self, cb: &Cell<B>, mut f: FN) -> Cell<C> where A: Clone {
         let sodium_ctx = self.sodium_ctx();
         let lhs = self.sample();
@@ -287,6 +292,12 @@ impl<A:Send+'static> Cell<A> {
                 );
             }
         )
+    }
+
+    pub fn switch_c(cca: Cell<Cell<A>>) -> Cell<A> where A: Clone {
+        Cell::switch_s(cca.map(|ca| ca.updates()))
+            .or_else(&cca.updates().map(|ca| ca.sample()))
+            .hold(cca.sample().sample())
     }
 
     pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener where A: Clone {

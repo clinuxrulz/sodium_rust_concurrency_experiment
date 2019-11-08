@@ -61,4 +61,8 @@ impl<A:Clone+Send+'static> Stream<A> {
     pub fn listen_weak<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
         Listener { impl_: self.impl_.listen_weak(k) }
     }
+
+    pub fn listen<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
+        Listener { impl_: self.impl_.listen(k) }
+    }
 }

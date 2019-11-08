@@ -15,7 +15,7 @@ impl<A:Send+'static> StreamSink<A> {
         }
     }
 
-    pub fn to_stream(&self) -> Stream<A> {
+    pub fn stream(&self) -> Stream<A> {
         self.stream.clone()
     }
 

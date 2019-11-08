@@ -76,4 +76,8 @@ impl<A:Clone+Send+'static> Cell<A> {
     pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, k: K) -> Listener {
         Listener { impl_: self.impl_.listen_weak(k) }
     }
+
+    pub fn listen<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
+        Listener { impl_: self.impl_.listen(k) }
+    }
 }

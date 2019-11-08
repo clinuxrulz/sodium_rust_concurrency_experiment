@@ -313,6 +313,12 @@ impl<A:Send+'static> Cell<A> {
         })
     }
 
+    pub fn listen<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener where A: Clone {
+        self.sodium_ctx().transaction(|| {
+            self.value().listen(k)
+        })
+    }
+
     pub fn with_data<R,K:FnOnce(&mut CellData<A>)->R>(&self, k: K) -> R {
         let mut l = self.data.lock();
         let data: &mut CellData<A> = l.as_mut().unwrap();

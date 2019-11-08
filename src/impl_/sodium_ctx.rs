@@ -1,3 +1,4 @@
+use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
 use crate::impl_::node::WeakNode;
@@ -17,7 +18,8 @@ pub struct SodiumCtxData {
     pub changed_nodes: Vec<Node>,
     pub visited_nodes: Vec<Node>,
     pub transaction_depth: u32,
-    pub post: Vec<Box<dyn FnMut()+Send>>
+    pub post: Vec<Box<dyn FnMut()+Send>>,
+    pub keep_alive: Vec<Listener>
 }
 
 impl SodiumCtx {
@@ -30,7 +32,8 @@ impl SodiumCtx {
                         changed_nodes: Vec::new(),
                         visited_nodes: Vec::new(),
                         transaction_depth: 0,
-                        post: Vec::new()
+                        post: Vec::new(),
+                        keep_alive: Vec::new()
                     }
                 ))
         }

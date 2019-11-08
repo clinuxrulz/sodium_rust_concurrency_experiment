@@ -11,8 +11,8 @@ impl<A:Clone+Send+'static> StreamSink<A> {
         StreamSink { impl_: StreamSinkImpl::new(&sodium_ctx.impl_) }
     }
 
-    pub fn to_stream(&self) -> Stream<A> {
-        Stream { impl_: self.impl_.to_stream() }
+    pub fn stream(&self) -> Stream<A> {
+        Stream { impl_: self.impl_.stream() }
     }
 
     pub fn send(&self, a: A) {

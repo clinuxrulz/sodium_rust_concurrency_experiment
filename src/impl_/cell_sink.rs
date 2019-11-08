@@ -11,12 +11,12 @@ impl<A:Send+Clone+'static> CellSink<A> {
     pub fn new(sodium_ctx: &SodiumCtx, a: A) -> CellSink<A> {
         let stream_sink = StreamSink::new(sodium_ctx);
         CellSink {
-            cell: stream_sink.to_stream().hold(a),
+            cell: stream_sink.stream().hold(a),
             stream_sink
         }
     }
 
-    pub fn to_cell(&self) -> Cell<A> {
+    pub fn cell(&self) -> Cell<A> {
         self.cell.clone()
     }
 

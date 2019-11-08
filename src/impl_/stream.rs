@@ -189,7 +189,7 @@ impl<A:Send+'static> Stream<A> {
         })
     }
 
-    pub fn listen_weak<K:IsLambda1<A,()>+Send+'static>(&self, mut k: K) -> Listener {
+    pub fn _listen<K:IsLambda1<A,()>+Send+'static>(&self, mut k: K, weak: bool) -> Listener {
         let self_ = self.clone();
         let node =
             Node::new(
@@ -202,7 +202,15 @@ impl<A:Send+'static> Stream<A> {
                 },
                 vec![self.node()]
             );
-        Listener::new(node)
+        Listener::new(&self.sodium_ctx(), false, node)
+    }
+
+    pub fn listen_weak<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
+        self._listen(k, true)
+    }
+
+    pub fn listen<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
+        self._listen(k, false)
     }
 
     pub fn with_data<R,K:FnOnce(&mut StreamData<A>)->R>(&self, k: K) -> R {

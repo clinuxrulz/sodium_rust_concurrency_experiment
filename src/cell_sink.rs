@@ -11,8 +11,8 @@ impl<A:Clone+Send+'static> CellSink<A> {
         CellSink { impl_: CellSinkImpl::new(&sodium_ctx.impl_, a) }
     }
 
-    pub fn to_cell(&self) -> Cell<A> {
-        Cell { impl_: self.impl_.to_cell() }
+    pub fn cell(&self) -> Cell<A> {
+        Cell { impl_: self.impl_.cell() }
     }
 
     pub fn send(&self, a: A) {

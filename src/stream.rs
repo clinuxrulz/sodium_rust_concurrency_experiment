@@ -68,6 +68,11 @@ impl<A:Clone+Send+'static> Stream<A> {
         Cell { impl_: self.impl_.hold(a) }
     }
 
+    pub fn gate(&self, cpred: &Cell<bool>) -> Stream<A> {
+        let cpred = cpred.clone();
+        self.filter(move |_: &A| cpred.sample())
+    }
+
     pub fn listen_weak<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
         Listener { impl_: self.impl_.listen_weak(k) }
     }

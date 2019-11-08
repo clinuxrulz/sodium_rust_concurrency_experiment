@@ -1,4 +1,9 @@
 mod impl_;
+mod cell;
+mod sodium_ctx;
+mod stream;
+
+pub use self::impl_::node::Node;
 
 #[cfg(test)]
 mod tests {

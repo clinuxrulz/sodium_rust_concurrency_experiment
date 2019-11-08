@@ -18,6 +18,12 @@ impl<A> Clone for Stream<A> {
     }
 }
 
+impl<A:Clone+Send+'static> Stream<Option<A>> {
+    pub fn filter_option(&self) -> Stream<A> {
+        self.filter(|a: &Option<A>| a.is_some()).map(|a: &Option<A>| a.clone().unwrap())
+    }
+}
+
 impl<A:Clone+Send+'static> Stream<A> {
     pub fn new(sodium_ctx: &SodiumCtx) -> Stream<A> {
         Stream {

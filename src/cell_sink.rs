@@ -8,7 +8,7 @@ pub struct CellSink<A> {
 
 impl<A:Clone+Send+'static> CellSink<A> {
     pub fn new(sodium_ctx: &SodiumCtx, a: A) -> CellSink<A> {
-        CellSink { impl_: CellSinkImpl::new(sodium_ctx, a) }
+        CellSink { impl_: CellSinkImpl::new(&sodium_ctx.impl_, a) }
     }
 
     pub fn to_cell(&self) -> Cell<A> {

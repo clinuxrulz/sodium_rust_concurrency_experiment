@@ -39,7 +39,7 @@ impl<A:Send+'static> Stream<A> {
         }
     }
 
-    pub fn _new<MK_NODE:FnOnce(&Stream<A>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MK_NODE) -> Stream<A> {
+    pub fn _new<MkNode:FnOnce(&Stream<A>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MkNode) -> Stream<A> {
         let s = Stream {
             data: Arc::new(Mutex::new(StreamData {
                 firing_op: None,
@@ -96,7 +96,7 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn snapshot1<B:Send+Clone+'static>(&self, cb: &Cell<B>) -> Stream<B> {
-        self.snapshot(cb, |a: &A, b: &B| b.clone())
+        self.snapshot(cb, |_a: &A, b: &B| b.clone())
     }
 
     pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, mut f: FN) -> Stream<B> {
@@ -145,7 +145,7 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn or_else(&self, s2: &Stream<A>) -> Stream<A> where A: Clone {
-        self.merge(s2, |lhs:&A, rhs:&A| lhs.clone())
+        self.merge(s2, |lhs:&A, _rhs:&A| lhs.clone())
     }
 
     pub fn merge<FN:IsLambda2<A,A,A>+Send+'static>(&self, s2: &Stream<A>, mut f: FN) -> Stream<A> where A: Clone {

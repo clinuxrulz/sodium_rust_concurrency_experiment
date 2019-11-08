@@ -1,5 +1,3 @@
-use crate::impl_::sodium_ctx::SodiumCtx;
-
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;

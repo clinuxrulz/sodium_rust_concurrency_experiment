@@ -4,8 +4,7 @@ use crate::impl_::stream_sink::StreamSink;
 
 pub struct CellSink<A> {
     cell: Cell<A>,
-    stream_sink: StreamSink<A>,
-    sodium_ctx: SodiumCtx
+    stream_sink: StreamSink<A>
 }
 
 impl<A:Send+Clone+'static> CellSink<A> {
@@ -13,8 +12,7 @@ impl<A:Send+Clone+'static> CellSink<A> {
         let stream_sink = StreamSink::new(sodium_ctx);
         CellSink {
             cell: stream_sink.to_stream().hold(a),
-            stream_sink,
-            sodium_ctx: sodium_ctx.clone()
+            stream_sink
         }
     }
 

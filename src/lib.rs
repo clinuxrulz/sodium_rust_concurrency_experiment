@@ -1,11 +1,13 @@
 mod impl_;
 mod cell;
+mod cell_sink;
 mod listener;
 mod sodium_ctx;
 mod stream;
 mod stream_sink;
 
 pub use self::cell::Cell;
+pub use self::cell_sink::CellSink;
 pub use self::impl_::lambda::IsLambda1;
 pub use self::impl_::lambda::IsLambda2;
 pub use self::impl_::lambda::IsLambda3;
@@ -33,7 +35,7 @@ mod tests {
     fn stream_sink() {
         let sodium_ctx = SodiumCtx::new();
         let s : StreamSink<i32> = StreamSink::new(&sodium_ctx);
-        let l = s.to_stream().listen_weak(|a: &i32| {
+        let _l = s.to_stream().listen_weak(|a: &i32| {
             println!("{}", a);
         });
         s.send(1);

@@ -307,7 +307,7 @@ impl<A:Send+'static> Cell<A> {
             .hold(cca.sample().sample())
     }
 
-    pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener where A: Clone {
+    pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, k: K) -> Listener where A: Clone {
         self.sodium_ctx().transaction(|| {
             self.value().listen_weak(k)
         })

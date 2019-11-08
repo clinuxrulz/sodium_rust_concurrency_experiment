@@ -163,7 +163,7 @@ fn merge_simultaneous() {
     }
     assert_memory_freed(sodium_ctx);
 }
-/*
+
 #[test]
 fn coalesce() {
     let mut sodium_ctx = SodiumCtx::new();
@@ -174,23 +174,27 @@ fn coalesce() {
         let l;
         {
             let out = out.clone();
-            l = s.listen(
-                move |a|
-                    out.borrow_mut().push(*a)
+            l = s.stream().listen(
+                move |a: &i32|
+                    out.lock().as_mut().unwrap().push(*a)
             );
         }
         sodium_ctx.transaction(
-            |_| {
-                s.send(&2);
+            || {
+                s.send(2);
             }
         );
         sodium_ctx.transaction(
-            |_| {
-                s.send(&8);
-                s.send(&40);
+            || {
+                s.send(8);
+                s.send(40);
             }
         );
-        assert_eq!(vec![2, 48], *out.borrow());
+        {
+            let lock = out.lock();
+            let out: &Vec<i32> = lock.as_ref().unwrap();
+            assert_eq!(vec![2, 48], *out);
+        }
         l.unlisten();
     }
     assert_memory_freed(sodium_ctx);
@@ -207,21 +211,27 @@ fn filter() {
         {
             let out = out.clone();
             l = s
+                .stream()
                 .filter(|a: &u32| *a < 10)
                 .listen(
-                    move |a|
-                        out.borrow_mut().push(*a)
+                    move |a: &u32|
+                        out.lock().as_mut().unwrap().push(*a)
                 );
         }
-        s.send(&2);
-        s.send(&16);
-        s.send(&9);
-        assert_eq!(vec![2, 9], *out.borrow());
+        s.send(2);
+        s.send(16);
+        s.send(9);
+        {
+            let lock = out.lock();
+            let out: &Vec<u32> = lock.as_ref().unwrap();
+            assert_eq!(vec![2, 9], *out);
+        }
         l.unlisten();
     }
     assert_memory_freed(sodium_ctx);
 }
 
+/*
 #[test]
 fn filter_option() {
     let mut sodium_ctx = SodiumCtx::new();
@@ -235,7 +245,7 @@ fn filter_option() {
             l = s.filter_option()
                 .listen(
                     move |a|
-                        out.borrow_mut().push(*a)
+                        out.lock().as_mut().unwrap().push(*a)
                 );
         }
         s.send(&Some("tomato"));
@@ -267,7 +277,7 @@ fn merge() {
             let out = out.clone();
             l = sc.listen(
                 move |a|
-                    out.borrow_mut().push(*a)
+                    out.lock().as_mut().unwrap().push(*a)
             );
         }
         sa.send(&2);
@@ -307,7 +317,7 @@ fn loop_() {
             let out = out.clone();
             l = sc.listen(
                 move |a|
-                    out.borrow_mut().push(*a)
+                    out.lock().as_mut().unwrap().push(*a)
             );
         }
         sa.send(&2);
@@ -334,7 +344,7 @@ fn gate() {
                     .gate(&pred)
                     .listen(
                         move |a|
-                            out.borrow_mut().push(*a)
+                            out.lock().as_mut().unwrap().push(*a)
                     );
         }
         s.send(&"H");
@@ -363,7 +373,7 @@ fn collect() {
             l =
                 sum.listen(
                     move |a|
-                        out.borrow_mut().push(*a)
+                        out.lock().as_mut().unwrap().push(*a)
                 );
         }
         ea.send(&5);
@@ -392,7 +402,7 @@ fn accum() {
             l =
                 sum.listen(
                     move |a|
-                        out.borrow_mut().push(*a)
+                        out.lock().as_mut().unwrap().push(*a)
                 );
         }
         ea.send(&5);
@@ -422,7 +432,7 @@ fn once() {
                     .once()
                     .listen(
                         move |a|
-                            out.borrow_mut().push(*a)
+                            out.lock().as_mut().unwrap().push(*a)
                     );
         }
         s.send(&"A");
@@ -452,7 +462,7 @@ fn defer() {
                     .snapshot(&c)
                     .listen(
                         move |a|
-                            out.borrow_mut().push(*a)
+                            out.lock().as_mut().unwrap().push(*a)
                     );
         }
         s.send(&"C");
@@ -479,7 +489,7 @@ fn hold() {
                 ::updates(&c)
                 .listen(
                     move |a|
-                        out.borrow_mut().push(*a)
+                        out.lock().as_mut().unwrap().push(*a)
                 );
         }
         s.send(&2);
@@ -506,7 +516,7 @@ fn hold_is_delayed() {
                 s_pair
                     .listen(
                         move |a|
-                            out.borrow_mut().push(a.clone())
+                            out.lock().as_mut().unwrap().push(a.clone())
                     );
         }
         s.send(&2);
@@ -558,7 +568,7 @@ fn switch_c() {
             l =
                 co.listen(
                     move |c|
-                        out.borrow_mut().push(*c)
+                        out.lock().as_mut().unwrap().push(*c)
                 );
         }
         ssc.send(&SC::new(Some("B"), Some("b"), None));
@@ -625,7 +635,7 @@ fn switch_s() {
             let out = out.clone();
             l = so.listen(
                 move |x|
-                    out.borrow_mut().push(*x)
+                    out.lock().as_mut().unwrap().push(*x)
             );
         }
         sss.send(&SS::new("A", "a", None));
@@ -673,7 +683,7 @@ fn switch_s_simultaneous() {
         {
             let out = out.clone();
             l = so.listen(
-                move |c| out.borrow_mut().push(*c)
+                move |c| out.lock().as_mut().unwrap().push(*c)
             );
         }
         ss1.s.send(&0);
@@ -724,7 +734,7 @@ fn loop_cell() {
             let out = out.clone();
             l = sum_out.listen(
                 move |a|
-                    out.borrow_mut().push(*a)
+                    out.lock().as_mut().unwrap().push(*a)
             );
         }
         sa.send(&2);

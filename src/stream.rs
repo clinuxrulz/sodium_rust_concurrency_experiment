@@ -180,6 +180,13 @@ impl<A:Send+'static> Stream<A> {
         )
     }
 
+    pub fn hold(&self, a: A) -> Cell<A> where A: Clone {
+        let sodium_ctx = self.sodium_ctx();
+        sodium_ctx.transaction(|| {
+            Cell::_new(&sodium_ctx, self.clone(), a)
+        })
+    }
+
     pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener {
         let self_ = self.clone();
         let node =

@@ -235,16 +235,16 @@ impl<A:Send+'static> Cell<A> {
             &sodium_ctx,
             |sa: &Stream<A>| {
                 let sodium_ctx = sodium_ctx.clone();
-                let mut innerS: Arc<Mutex<Stream<A>>> = Arc::new(Mutex::new(csa.sample()));
+                let inner_s: Arc<Mutex<Stream<A>>> = Arc::new(Mutex::new(csa.sample()));
                 let sa = sa.clone();
-                let mut node: Node;
+                let node1: Node;
                 {
-                    let innerS = innerS.clone();
-                    node = Node::new(
+                    let inner_s = inner_s.clone();
+                    node1 = Node::new(
                         move || {
-                            let l = innerS.lock();
-                            let innerS: &Stream<A> = l.as_ref().unwrap();
-                            innerS.with_firing_op(|firing_op: &mut Option<A>| {
+                            let l = inner_s.lock();
+                            let inner_s: &Stream<A> = l.as_ref().unwrap();
+                            inner_s.with_firing_op(|firing_op: &mut Option<A>| {
                                 if let Some(ref firing) = firing_op {
                                     sa._send(&sodium_ctx, firing.clone());
                                 }
@@ -253,37 +253,43 @@ impl<A:Send+'static> Cell<A> {
                         vec![csa.sample().node()]
                     );
                 }
+                let node2: Node;
                 {
-                    let node: Node = node.clone();
+                    let node1: Node = node1.clone();
                     let csa2 = csa.clone();
-                    let node2 = Node::new(
+                    node2 = Node::new(
                         move || {
                             csa.updates().with_firing_op(|firing_op: &mut Option<Stream<A>>| {
                                 if let Some(ref firing) = firing_op {
                                     let old_deps =
-                                        node.with_data(|data: &mut NodeData| {
+                                        node1.with_data(|data: &mut NodeData| {
                                             data.dependencies.clone()
                                         });
                                     for dep in old_deps {
-                                        node.remove_dependency(&dep);
+                                        node1.remove_dependency(&dep);
                                     }
-                                    node.add_dependency(firing.node());
-                                    let mut l = innerS.lock();
-                                    let innerS: &mut Stream<A> = l.as_mut().unwrap();
-                                    *innerS = firing.clone();
+                                    node1.add_dependency(firing.node());
+                                    let mut l = inner_s.lock();
+                                    let inner_s: &mut Stream<A> = l.as_mut().unwrap();
+                                    *inner_s = firing.clone();
                                 }
                             });
                         },
                         vec![csa2.updates().node()]
                     );
                 }
-                return node;
+                return Node::new(
+                    || {},
+                    vec![node1, node2]
+                );
             }
         )
     }
 
     pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, mut k: K) -> Listener where A: Clone {
-        self.value().listen_weak(k)
+        self.sodium_ctx().transaction(|| {
+            self.value().listen_weak(k)
+        })
     }
 
     pub fn with_data<R,K:FnOnce(&mut CellData<A>)->R>(&self, k: K) -> R {

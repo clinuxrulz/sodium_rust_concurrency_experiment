@@ -58,8 +58,8 @@ fn map_to() {
                         }
                     );
         }
-        s.send(&7);
-        s.send(&9);
+        s.send(7);
+        s.send(9);
         {
             let lock = out.lock();
             let out: &Vec<&'static str> = lock.as_ref().unwrap();
@@ -70,7 +70,6 @@ fn map_to() {
     assert_memory_freed(sodium_ctx);
 }
 
-/*
 #[test]
 fn merge_non_simultaneous() {
     let mut sodium_ctx = SodiumCtx::new();
@@ -83,16 +82,20 @@ fn merge_non_simultaneous() {
         {
             let out = out.clone();
             l =
-                s2.or_else(&s1)
+                s2.stream().or_else(&s1.stream())
                     .listen(
-                        move |a|
-                            (*out).borrow_mut().push(*a)
+                        move |a: &i32|
+                            out.lock().as_mut().unwrap().push(*a)
                     );
         }
-        s1.send(&7);
-        s2.send(&9);
-        s1.send(&8);
-        assert_eq!(vec![7, 9, 8], *(*out).borrow());
+        s1.send(7);
+        s2.send(9);
+        s1.send(8);
+        {
+            let lock = out.lock();
+            let out: &Vec<i32> = lock.as_ref().unwrap();
+            assert_eq!(vec![7, 9, 8], *out);
+        }
         l.unlisten();
     }
     assert_memory_freed(sodium_ctx);
@@ -110,53 +113,57 @@ fn merge_simultaneous() {
         {
             let out = out.clone();
             l =
-                s2.or_else(&s1)
+                s2.stream().or_else(&s1.stream())
                     .listen(
-                        move |a|
-                            (*out).borrow_mut().push(*a)
+                        move |a: &i32|
+                            (*out).lock().as_mut().unwrap().push(*a)
                     );
         }
         sodium_ctx.transaction(
-            |_| {
-                s1.send(&7);
-                s2.send(&60);
+            || {
+                s1.send(7);
+                s2.send(60);
             }
         );
         sodium_ctx.transaction(
-            |_| {
-                s1.send(&9);
+            || {
+                s1.send(9);
             }
         );
         sodium_ctx.transaction(
-            |_| {
-                s1.send(&7);
-                s1.send(&60);
-                s2.send(&8);
-                s2.send(&90);
+            || {
+                s1.send(7);
+                s1.send(60);
+                s2.send(8);
+                s2.send(90);
             }
         );
         sodium_ctx.transaction(
-            |_| {
-                s2.send(&8);
-                s2.send(&90);
-                s1.send(&7);
-                s1.send(&60);
+            || {
+                s2.send(8);
+                s2.send(90);
+                s1.send(7);
+                s1.send(60);
             }
         );
         sodium_ctx.transaction(
-            |_| {
-                s2.send(&8);
-                s1.send(&7);
-                s2.send(&90);
-                s1.send(&60);
+            || {
+                s2.send(8);
+                s1.send(7);
+                s2.send(90);
+                s1.send(60);
             }
         );
-        assert_eq!(vec![60, 9, 90, 90, 90], *(*out).borrow());
+        {
+            let lock = out.lock();
+            let out: &Vec<i32> = lock.as_ref().unwrap();
+            assert_eq!(vec![60, 9, 90, 90, 90], *out);
+        }
         l.unlisten();
     }
     assert_memory_freed(sodium_ctx);
 }
-
+/*
 #[test]
 fn coalesce() {
     let mut sodium_ctx = SodiumCtx::new();

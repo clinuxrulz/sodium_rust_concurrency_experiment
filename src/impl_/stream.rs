@@ -25,7 +25,8 @@ impl<A> Clone for Stream<A> {
 pub struct StreamData<A> {
     pub firing_op: Option<A>,
     pub node: Node,
-    pub sodium_ctx: SodiumCtx
+    pub sodium_ctx: SodiumCtx,
+    pub coalescer_op: Option<Box<dyn FnMut(&A,&A)->A+Send>>
 }
 
 impl<A:Send+'static> Stream<A> {
@@ -34,7 +35,19 @@ impl<A:Send+'static> Stream<A> {
             data: Arc::new(Mutex::new(StreamData {
                 firing_op: None,
                 node: sodium_ctx.null_node(),
-                sodium_ctx: sodium_ctx.clone()
+                sodium_ctx: sodium_ctx.clone(),
+                coalescer_op: None
+            })),
+        }
+    }
+
+    pub fn _new_with_coalescer<COALESCER:FnMut(&A,&A)->A+Send+'static>(sodium_ctx: &SodiumCtx, coalescer: COALESCER) -> Stream<A> {
+        Stream {
+            data: Arc::new(Mutex::new(StreamData {
+                firing_op: None,
+                node: sodium_ctx.null_node(),
+                sodium_ctx: sodium_ctx.clone(),
+                coalescer_op: Some(Box::new(coalescer))
             })),
         }
     }
@@ -44,7 +57,8 @@ impl<A:Send+'static> Stream<A> {
             data: Arc::new(Mutex::new(StreamData {
                 firing_op: None,
                 node: sodium_ctx.null_node(),
-                sodium_ctx: sodium_ctx.clone()
+                sodium_ctx: sodium_ctx.clone(),
+                coalescer_op: None
             }))
         };
         let node = mk_node(&s);
@@ -223,7 +237,16 @@ impl<A:Send+'static> Stream<A> {
         sodium_ctx.transaction(|| {
             let is_first = self.with_data(|data: &mut StreamData<A>| {
                 let is_first = data.firing_op.is_none();
-                data.firing_op = Some(a);
+                if let Some(ref mut coalescer) = data.coalescer_op {
+                    if let Some(ref mut firing) = data.firing_op {
+                        *firing = coalescer(firing, &a);
+                    }
+                    if is_first {
+                        data.firing_op = Some(a);
+                    }
+                } else {
+                    data.firing_op = Some(a);
+                }
                 data.node.with_data(|data: &mut NodeData| {
                     data.changed = true;
                 });

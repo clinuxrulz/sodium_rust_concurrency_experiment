@@ -18,4 +18,12 @@ impl SodiumCtx {
     pub fn new_stream_sink<A:Clone+Send+'static>(&self) -> StreamSink<A> {
         StreamSink::new(self)
     }
+
+    pub fn new_stream_sink_with_coalescer<A:Clone+Send+'static,COALESCER:FnMut(&A,&A)->A+Send+'static>(&self, coalescer: COALESCER) -> StreamSink<A> {
+        StreamSink::new_with_coalescer(self, coalescer)
+    }
+
+    pub fn transaction<R,K:FnOnce()->R>(&self, k: K) -> R {
+        self.impl_.transaction(k)
+    }
 }

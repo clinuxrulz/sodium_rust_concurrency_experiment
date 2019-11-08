@@ -15,6 +15,13 @@ impl<A:Send+'static> StreamSink<A> {
         }
     }
 
+    pub fn new_with_coalescer<COALESCER:FnMut(&A,&A)->A+Send+'static>(sodium_ctx: &SodiumCtx, coalescer: COALESCER) -> StreamSink<A> {
+        StreamSink {
+            stream: Stream::_new_with_coalescer(sodium_ctx, coalescer),
+            sodium_ctx: sodium_ctx.clone()
+        }
+    }
+
     pub fn stream(&self) -> Stream<A> {
         self.stream.clone()
     }

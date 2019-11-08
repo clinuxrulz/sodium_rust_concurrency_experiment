@@ -3,6 +3,8 @@ use crate::impl_::stream::Stream as StreamImpl;
 use crate::impl_::node::Node;
 use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
+use crate::impl_::lambda::IsLambda3;
+use crate::impl_::lambda::lambda2;
 use crate::listener::Listener;
 use crate::sodium_ctx::SodiumCtx;
 
@@ -42,6 +44,17 @@ impl<A:Clone+Send+'static> Stream<A> {
 
     pub fn snapshot1<B:Send+Clone+'static>(&self, cb: &Cell<B>) -> Stream<B> {
         self.snapshot(cb, |_a: &A, b: &B| b.clone())
+    }
+
+    pub fn snapshot3<B:Send+Clone+'static,C:Send+Clone+'static,D:Send+Clone+'static,FN:IsLambda3<A,B,C,D>+Send+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, mut f: FN) -> Stream<D> {
+        let deps: Vec<Node>;
+        if let Some(deps2) = f.deps_op() {
+            deps = deps2.clone();
+        } else {
+            deps = Vec::new();
+        }
+        let cc = cc.clone();
+        self.snapshot(cb, lambda2(move |a: &A, b: &B| f.call(a, b, &cc.sample()), deps))
     }
 
     pub fn map<B:Send+Clone+'static,FN:IsLambda1<A,B>+Send+'static>(&self, f: FN) -> Stream<B> {

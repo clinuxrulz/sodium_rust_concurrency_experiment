@@ -523,15 +523,14 @@ fn hold() {
     assert_memory_freed(sodium_ctx);
 }
 
-/*
 #[test]
 fn hold_is_delayed() {
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     {
         let s = sodium_ctx.new_stream_sink();
-        let h = s.hold(0);
-        let s_pair = s.snapshot2(&h, |a: &i32, b: &i32| format!("{} {}", *a, *b));
+        let h = s.stream().hold(0);
+        let s_pair = s.stream().snapshot(&h, |a: &i32, b: &i32| format!("{} {}", *a, *b));
         let out = Arc::new(Mutex::new(Vec::new()));
         let l;
         {
@@ -539,18 +538,23 @@ fn hold_is_delayed() {
             l =
                 s_pair
                     .listen(
-                        move |a|
+                        move |a: &String|
                             out.lock().as_mut().unwrap().push(a.clone())
                     );
         }
-        s.send(&2);
-        s.send(&3);
+        s.send(2);
+        s.send(3);
         l.unlisten();
-        assert_eq!(vec![String::from("2 0"), String::from("3 2")], *out.borrow());
+        {
+            let lock = out.lock();
+            let out: &Vec<String> = lock.as_ref().unwrap();
+            assert_eq!(vec![String::from("2 0"), String::from("3 2")], *out);
+        }
     }
     assert_memory_freed(sodium_ctx);
 }
 
+/*
 #[test]
 fn switch_c() {
     let mut sodium_ctx = SodiumCtx::new();

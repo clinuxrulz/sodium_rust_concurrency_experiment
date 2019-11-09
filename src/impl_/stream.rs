@@ -224,7 +224,7 @@ impl<A:Send+'static> Stream<A> {
                 },
                 vec![self.node()]
             );
-        Listener::new(&self.sodium_ctx(), false, node)
+        Listener::new(&self.sodium_ctx(), weak, node)
     }
 
     pub fn listen_weak<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {

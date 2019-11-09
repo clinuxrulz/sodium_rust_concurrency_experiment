@@ -1,6 +1,7 @@
 pub mod cell;
 pub mod cell_sink;
 pub mod lambda;
+pub mod lazy;
 pub mod listener;
 pub mod node;
 pub mod sodium_ctx;

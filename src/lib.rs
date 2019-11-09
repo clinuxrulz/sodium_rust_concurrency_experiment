@@ -23,6 +23,7 @@ pub use self::impl_::lambda::lambda3;
 pub use self::impl_::lambda::lambda4;
 pub use self::impl_::lambda::lambda5;
 pub use self::impl_::lambda::lambda6;
+pub use self::impl_::lazy::Lazy;
 pub use self::impl_::node::Node;
 pub use self::listener::Listener;
 pub use self::operational::Operational;

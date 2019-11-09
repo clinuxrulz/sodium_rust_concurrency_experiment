@@ -5,6 +5,7 @@ use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 use crate::impl_::lambda::IsLambda3;
 use crate::impl_::lambda::lambda2;
+use crate::Lazy;
 use crate::listener::Listener;
 use crate::sodium_ctx::SodiumCtx;
 
@@ -79,6 +80,10 @@ impl<A:Clone+Send+'static> Stream<A> {
 
     pub fn hold(&self, a: A) -> Cell<A> {
         Cell { impl_: self.impl_.hold(a) }
+    }
+
+    pub fn hold_lazy(&self, a: Lazy<A>) -> Cell<A> {
+        Cell { impl_: self.impl_.hold_lazy(a) }
     }
 
     pub fn gate(&self, cpred: &Cell<bool>) -> Stream<A> {

@@ -1,3 +1,4 @@
+use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
@@ -27,17 +28,17 @@ impl<A> Clone for Cell<A> {
 }
 
 pub struct CellData<A> {
-    value: A,
+    value: Lazy<A>,
     next_value_op: Option<A>,
     stream: Stream<A>,
     node: Node
 }
 
 impl<A:Send+'static> Cell<A> {
-    pub fn new(sodium_ctx: &SodiumCtx, value: A) -> Cell<A> {
+    pub fn new(sodium_ctx: &SodiumCtx, value: A) -> Cell<A> where A: Clone {
         Cell {
             data: Arc::new(Mutex::new(CellData {
-                value: value,
+                value: Lazy::of_value(value),
                 next_value_op: None,
                 stream: Stream::new(sodium_ctx),
                 node: sodium_ctx.null_node()
@@ -45,7 +46,7 @@ impl<A:Send+'static> Cell<A> {
         }
     }
 
-    pub fn _new(sodium_ctx: &SodiumCtx, stream: Stream<A>, value: A) -> Cell<A> where A: Clone {
+    pub fn _new(sodium_ctx: &SodiumCtx, stream: Stream<A>, value: Lazy<A>) -> Cell<A> where A: Clone {
         let stream2 = stream.clone();
         let c = Cell {
             data: Arc::new(Mutex::new(CellData {
@@ -76,7 +77,7 @@ impl<A:Send+'static> Cell<A> {
                                     let mut next_value_op: Option<A> = None;
                                     mem::swap(&mut next_value_op, &mut data.next_value_op);
                                     if let Some(next_value) = next_value_op {
-                                        data.value = next_value;
+                                        data.value = Lazy::of_value(next_value);
                                     }
                                 })
                             });
@@ -95,7 +96,7 @@ impl<A:Send+'static> Cell<A> {
     }
 
     pub fn sample(&self) -> A where A: Clone {
-        self.with_data(|data: &mut CellData<A>| data.value.clone())
+        self.with_data(|data: &mut CellData<A>| data.value.run())
     }
 
     pub fn updates(&self) -> Stream<A> {
@@ -110,7 +111,7 @@ impl<A:Send+'static> Cell<A> {
             let sodium_ctx2 = sodium_ctx.clone();
             {
                 let spark = spark.clone();
-                let a: A = self.with_data(|data: &mut CellData<A>| data.value.clone());
+                let a: A = self.with_data(|data: &mut CellData<A>| data.value.run());
                 sodium_ctx.post(move || {
                     sodium_ctx2.transaction(|| {
                         spark._send(&sodium_ctx2, a.clone());
@@ -159,7 +160,7 @@ impl<A:Send+'static> Cell<A> {
         Cell::_new(
             &sodium_ctx,
             s,
-            init
+            Lazy::of_value(init)
         )
     }
 

@@ -26,7 +26,7 @@ impl<A:Send+Clone+'static> Lazy<A> {
         }
     }
 
-    pub fn pure(value: A) -> Lazy<A> {
+    pub fn of_value(value: A) -> Lazy<A> {
         Lazy {
             data: Arc::new(Mutex::new(LazyData::Value(value)))
         }

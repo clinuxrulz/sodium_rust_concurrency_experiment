@@ -1,6 +1,7 @@
 use crate::impl_::cell::Cell;
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
+use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::lambda::IsLambda1;
@@ -197,6 +198,13 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn hold(&self, a: A) -> Cell<A> where A: Clone {
+        let sodium_ctx = self.sodium_ctx();
+        sodium_ctx.transaction(|| {
+            Cell::_new(&sodium_ctx, self.clone(), Lazy::of_value(a))
+        })
+    }
+
+    pub fn hold_lazy(&self, a: Lazy<A>) -> Cell<A> where A: Clone {
         let sodium_ctx = self.sodium_ctx();
         sodium_ctx.transaction(|| {
             Cell::_new(&sodium_ctx, self.clone(), a)

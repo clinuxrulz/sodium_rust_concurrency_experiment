@@ -1,5 +1,6 @@
 mod impl_;
 mod cell;
+mod cell_loop;
 mod cell_sink;
 mod listener;
 mod operational;
@@ -9,6 +10,7 @@ mod stream_loop;
 mod stream_sink;
 
 pub use self::cell::Cell;
+pub use self::cell_loop::CellLoop;
 pub use self::cell_sink::CellSink;
 pub use self::impl_::lambda::IsLambda1;
 pub use self::impl_::lambda::IsLambda2;

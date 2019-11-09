@@ -5,6 +5,7 @@ mod listener;
 mod operational;
 mod sodium_ctx;
 mod stream;
+mod stream_loop;
 mod stream_sink;
 
 pub use self::cell::Cell;
@@ -27,6 +28,7 @@ pub use self::listener::Listener;
 pub use self::operational::Operational;
 pub use self::sodium_ctx::SodiumCtx;
 pub use self::stream::Stream;
+pub use self::stream_loop::StreamLoop;
 pub use self::stream_sink::StreamSink;
 
 #[cfg(test)]

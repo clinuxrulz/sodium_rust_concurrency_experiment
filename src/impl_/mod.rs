@@ -1,4 +1,5 @@
 pub mod cell;
+pub mod cell_loop;
 pub mod cell_sink;
 pub mod lambda;
 pub mod lazy;

@@ -14,6 +14,12 @@ pub struct StreamLoopData<A> {
     pub looped: bool
 }
 
+impl<A> Clone for StreamLoop<A> {
+    fn clone(&self) -> Self {
+        StreamLoop { data: self.data.clone() }
+    }
+}
+
 impl<A:Clone+Send+'static> StreamLoop<A> {
 
     pub fn new(sodium_ctx: &SodiumCtx) -> StreamLoop<A> {

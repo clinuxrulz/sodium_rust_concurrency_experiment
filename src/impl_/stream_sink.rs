@@ -1,5 +1,7 @@
+use crate::impl_::node::NodeData;
 use crate::impl_::stream::Stream;
 use crate::impl_::sodium_ctx::SodiumCtx;
+use crate::impl_::sodium_ctx::SodiumCtxData;
 
 pub struct StreamSink<A> {
     stream: Stream<A>,
@@ -36,7 +38,14 @@ impl<A:Send+'static> StreamSink<A> {
 
     pub fn send(&self, a: A) {
         self.sodium_ctx.transaction(|| {
-            self.sodium_ctx.add_dependents_to_changed_nodes(self.stream.node());
+            let node = self.stream().node();
+            node.with_data(|data: &mut NodeData| {
+                data.changed = true;
+            });
+            self.sodium_ctx.with_data(|data: &mut SodiumCtxData| {
+                data.changed_nodes.push(node);
+            });
+            //self.sodium_ctx.add_dependents_to_changed_nodes(self.stream.node());
             self.stream._send(a);
         });
     }

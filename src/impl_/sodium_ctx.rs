@@ -183,7 +183,9 @@ impl SodiumCtx {
             node.with_data(|data: &mut NodeData| {
                 mem::swap(&mut update, &mut data.update);
             });
-            // if self changed then update dependents
+        }
+        // if self changed then update dependents
+        if node.with_data(|data: &mut NodeData| data.changed) {
             let dependents = node.with_data(|data: &mut NodeData| {
                 data.dependents.clone()
             });

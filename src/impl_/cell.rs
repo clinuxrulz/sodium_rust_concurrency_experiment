@@ -272,31 +272,35 @@ impl<A:Send+'static> Cell<A> {
                 {
                     let node1: Node = node1.clone();
                     let csa2 = csa.clone();
+                    let sodium_ctx = sodium_ctx.clone();
                     node2 = Node::new(
                         move || {
                             csa.updates().with_firing_op(|firing_op: &mut Option<Stream<A>>| {
                                 if let Some(ref firing) = firing_op {
-                                    let old_deps =
+                                    let firing = firing.clone();
+                                    let node1 = node1.clone();
+                                    let inner_s = inner_s.clone();
+                                    sodium_ctx.pre_post(move || {
+                                        let old_deps =
                                         node1.with_data(|data: &mut NodeData| {
                                             data.dependencies.clone()
                                         });
-                                    for dep in old_deps {
-                                        node1.remove_dependency(&dep);
-                                    }
-                                    node1.add_dependency(firing.node());
-                                    let mut l = inner_s.lock();
-                                    let inner_s: &mut Stream<A> = l.as_mut().unwrap();
-                                    *inner_s = firing.clone();
+                                        for dep in old_deps {
+                                            node1.remove_dependency(&dep);
+                                        }
+                                        node1.add_dependency(firing.node());
+                                        let mut l = inner_s.lock();
+                                        let inner_s: &mut Stream<A> = l.as_mut().unwrap();
+                                        *inner_s = firing.clone();
+                                    });
                                 }
                             });
                         },
                         vec![csa2.updates().node()]
                     );
                 }
-                return Node::new(
-                    || {},
-                    vec![node1, node2]
-                );
+                node1.add_keep_alive(&node2);
+                return node1;
             }
         )
     }

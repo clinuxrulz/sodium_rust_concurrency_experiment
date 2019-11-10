@@ -126,7 +126,7 @@ impl<A:Send+'static> Stream<A> {
                     move || {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
-                                _s._send(&sodium_ctx, f.call(firing));
+                                _s._send(f.call(firing));
                             }
                         })
                     },
@@ -149,7 +149,7 @@ impl<A:Send+'static> Stream<A> {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
                             let firing_op2 = firing_op.clone().filter(|firing| pred.call(firing));
                             if let Some(firing) = firing_op2 {
-                                _s._send(&sodium_ctx, firing);
+                                _s._send(firing);
                             }
                         });
                     },
@@ -179,13 +179,13 @@ impl<A:Send+'static> Stream<A> {
                             _s2.with_firing_op(|firing2_op: &mut Option<A>| {
                                 if let Some(ref firing1) = firing1_op {
                                     if let Some(ref firing2) = firing2_op {
-                                        _s._send(&sodium_ctx, f.call(firing1, firing2));
+                                        _s._send(f.call(firing1, firing2));
                                     } else {
-                                        _s._send(&sodium_ctx, firing1.clone());
+                                        _s._send(firing1.clone());
                                     }
                                 } else {
                                     if let Some(ref firing2) = firing2_op {
-                                        _s._send(&sodium_ctx, firing2.clone());
+                                        _s._send(firing2.clone());
                                     }
                                 }
                             })
@@ -241,7 +241,9 @@ impl<A:Send+'static> Stream<A> {
         k(data)
     }
 
-    pub fn _send(&self, sodium_ctx: &SodiumCtx, a: A) {
+    pub fn _send(&self, a: A) {
+        let sodium_ctx = self.sodium_ctx();
+        let sodium_ctx = &sodium_ctx;
         sodium_ctx.transaction(|| {
             let is_first = self.with_data(|data: &mut StreamData<A>| {
                 let is_first = data.firing_op.is_none();

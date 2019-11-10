@@ -29,7 +29,7 @@ impl<A:Send+'static> StreamSink<A> {
     pub fn send(&self, a: A) {
         self.sodium_ctx.transaction(|| {
             self.sodium_ctx.add_dependents_to_changed_nodes(self.stream.node());
-            self.stream._send(&self.sodium_ctx, a);
+            self.stream._send(a);
         });
     }
 }

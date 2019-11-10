@@ -49,7 +49,7 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
                 data.update = Box::new(move || {
                     s.with_firing_op(|firing_op: &mut Option<A>| {
                         if let Some(ref firing) = firing_op {
-                            s_out._send(&s.sodium_ctx(), firing.clone());
+                            s_out._send(firing.clone());
                         }
                     });
                 });

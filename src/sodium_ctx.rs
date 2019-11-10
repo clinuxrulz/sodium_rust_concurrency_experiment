@@ -1,5 +1,7 @@
 use crate::CellSink;
+use crate::CellLoop;
 use crate::StreamSink;
+use crate::StreamLoop;
 use crate::impl_::sodium_ctx::SodiumCtx as SodiumCtxImpl;
 
 pub struct SodiumCtx {
@@ -17,6 +19,14 @@ impl SodiumCtx {
 
     pub fn new_stream_sink<A:Clone+Send+'static>(&self) -> StreamSink<A> {
         StreamSink::new(self)
+    }
+
+    pub fn new_cell_loop<A:Clone+Send+'static>(&self) -> CellLoop<A> {
+        CellLoop::new(self)
+    }
+
+    pub fn new_stream_loop<A:Clone+Send+'static>(&self) -> StreamLoop<A> {
+        StreamLoop::new(self)
     }
 
     pub fn new_stream_sink_with_coalescer<A:Clone+Send+'static,COALESCER:FnMut(&A,&A)->A+Send+'static>(&self, coalescer: COALESCER) -> StreamSink<A> {

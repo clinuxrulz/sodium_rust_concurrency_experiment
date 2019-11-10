@@ -114,7 +114,7 @@ impl<A:Send+'static> Cell<A> {
                 let a: A = self.with_data(|data: &mut CellData<A>| data.value.run());
                 sodium_ctx.post(move || {
                     sodium_ctx2.transaction(|| {
-                        spark._send(&sodium_ctx2, a.clone());
+                        spark._send(a.clone());
                         sodium_ctx2.add_dependents_to_changed_nodes(spark.node());
                     });
                 });
@@ -262,7 +262,7 @@ impl<A:Send+'static> Cell<A> {
                             let inner_s: &Stream<A> = l.as_ref().unwrap();
                             inner_s.with_firing_op(|firing_op: &mut Option<A>| {
                                 if let Some(ref firing) = firing_op {
-                                    sa._send(&sodium_ctx, firing.clone());
+                                    sa._send(firing.clone());
                                 }
                             });
                         },

@@ -739,6 +739,7 @@ fn switch_s_simultaneous() {
     }
     assert_memory_freed(sodium_ctx);
 }
+*/
 
 #[test]
 fn loop_cell() {
@@ -747,10 +748,11 @@ fn loop_cell() {
     {
         let sa = sodium_ctx.new_stream_sink();
         let sum_out = sodium_ctx.transaction(
-            |sodium_ctx: &SodiumCtx| {
-                let mut sum = sodium_ctx.new_cell_loop();
+            || {
+                let sum = sodium_ctx.new_cell_loop();
                 let sum_out = sa
-                    .snapshot2(&sum, |x: &i32, y: &i32| *x + *y)
+                    .stream()
+                    .snapshot(&sum.cell(), |x: &i32, y: &i32| *x + *y)
                     .hold(0);
                 sum.loop_(&sum_out);
                 sum_out
@@ -761,17 +763,20 @@ fn loop_cell() {
         {
             let out = out.clone();
             l = sum_out.listen(
-                move |a|
+                move |a: &i32|
                     out.lock().as_mut().unwrap().push(*a)
             );
         }
-        sa.send(&2);
-        sa.send(&3);
-        sa.send(&1);
+        sa.send(2);
+        sa.send(3);
+        sa.send(1);
         l.unlisten();
-        assert_eq!(vec![0, 2, 5, 6], *out.borrow());
+        {
+            let lock = out.lock();
+            let out: &Vec<i32> = lock.as_ref().unwrap();
+            assert_eq!(vec![0, 2, 5, 6], *out);
+        }
         assert_eq!(6, sum_out.sample());
     }
     assert_memory_freed(sodium_ctx);
 }
-*/

@@ -120,8 +120,9 @@ impl<A:Send+'static> Cell<A> {
             let sodium_ctx2 = sodium_ctx.clone();
             {
                 let spark = spark.clone();
-                let a: A = self.with_data(|data: &mut CellData<A>| data.value.run());
+                let self_ = self.clone();
                 sodium_ctx.post(move || {
+                    let a = self_.with_data(|data: &mut CellData<A>| data.value.run());
                     sodium_ctx2.transaction(|| {
                         spark._send(a.clone());
                         sodium_ctx2.add_dependents_to_changed_nodes(spark.node());

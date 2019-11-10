@@ -121,7 +121,6 @@ impl<A:Send+'static> Stream<A> {
             &sodium_ctx,
             |s: &Stream<B>| {
                 let _s = s.clone();
-                let sodium_ctx = sodium_ctx.clone();
                 Node::new(
                     move || {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
@@ -143,7 +142,6 @@ impl<A:Send+'static> Stream<A> {
             &sodium_ctx,
             |s: &Stream<A>| {
                 let _s = s.clone();
-                let sodium_ctx = sodium_ctx.clone();
                 Node::new(
                     move || {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
@@ -172,7 +170,6 @@ impl<A:Send+'static> Stream<A> {
             |s: &Stream<A>| {
                 let _s = s.clone();
                 let _s2 = s2.clone();
-                let sodium_ctx = sodium_ctx.clone();
                 Node::new(
                     move || {
                         _self.with_firing_op(|firing1_op: &mut Option<A>| {

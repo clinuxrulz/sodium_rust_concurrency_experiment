@@ -250,7 +250,6 @@ impl<A:Send+'static> Cell<A> {
         Stream::_new(
             &sodium_ctx,
             |sa: &Stream<A>| {
-                let sodium_ctx = sodium_ctx.clone();
                 let inner_s: Arc<Mutex<Stream<A>>> = Arc::new(Mutex::new(csa.sample()));
                 let sa = sa.clone();
                 let node1: Node;

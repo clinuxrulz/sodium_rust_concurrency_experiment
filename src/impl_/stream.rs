@@ -5,6 +5,7 @@ use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::stream_loop::StreamLoop;
+use crate::impl_::stream_sink::StreamSink;
 use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 
@@ -84,7 +85,7 @@ impl<A:Send+'static> Stream<A> {
             });
         if is_firing {
             let s = s.clone();
-            sodium_ctx.post(move || {
+            sodium_ctx.pre_post(move || {
                 s.with_data(|data: &mut StreamData<A>| {
                     data.firing_op = None;
                     data.node.with_data(|data: &mut NodeData| data.changed = false)
@@ -245,6 +246,17 @@ impl<A:Send+'static> Stream<A> {
     pub fn defer(&self) -> Stream<A> where A: Clone {
         let sodium_ctx = self.sodium_ctx();
         sodium_ctx.transaction(|| {
+            let ss = StreamSink::new(&sodium_ctx);
+            let s = ss.stream();
+            let sodium_ctx = sodium_ctx.clone();
+            let listener = self.listen_weak(move |a:&A| {
+                let ss = ss.clone();
+                let a = a.clone();
+                sodium_ctx.post(move || ss.send(a.clone()))
+            });
+            s.node().add_keep_alive(&listener.node_op().unwrap());
+            return s;
+            /*
             let s = Stream::new(&self.sodium_ctx());
             let node: Node;
             {
@@ -260,20 +272,20 @@ impl<A:Send+'static> Stream<A> {
                             self_.with_firing_op(|firing_op: &mut Option<A>| {
                                 firing_op.clone()
                             });
-                        sodium_ctx.post(move || {
-                            if let Some(ref firing) = &firing_op {
+                        if let Some(firing) = firing_op {
+                            sodium_ctx.post(move || {
                                 sodium_ctx2.transaction(|| {
-                                    s._send(firing.clone());
                                     sodium_ctx2.add_dependents_to_changed_nodes(s.node());
+                                    s._send(firing.clone());
                                 });
-                            }
-                        });
+                            });
+                        }
                     },
                     vec![self.node()]
                 );
             }
             s.node().add_keep_alive(&node);
-            s
+            s*/
         })
     }
 
@@ -362,7 +374,7 @@ impl<A:Send+'static> Stream<A> {
             });
             if is_first {
                 let _self = self.clone();
-                sodium_ctx.post(move || {
+                sodium_ctx.pre_post(move || {
                     _self.with_data(|data: &mut StreamData<A>| {
                         data.firing_op = None;
                         data.node.with_data(|data: &mut NodeData| {

@@ -18,6 +18,7 @@ pub struct SodiumCtxData {
     pub changed_nodes: Vec<Node>,
     pub visited_nodes: Vec<Node>,
     pub transaction_depth: u32,
+    pub pre_post: Vec<Box<dyn FnMut()+Send>>,
     pub post: Vec<Box<dyn FnMut()+Send>>,
     pub keep_alive: Vec<Listener>
 }
@@ -32,6 +33,7 @@ impl SodiumCtx {
                         changed_nodes: Vec::new(),
                         visited_nodes: Vec::new(),
                         transaction_depth: 0,
+                        pre_post: Vec::new(),
                         post: Vec::new(),
                         keep_alive: Vec::new()
                     }
@@ -73,6 +75,12 @@ impl SodiumCtx {
             });
         });
     }
+
+    pub fn pre_post<K:FnMut()+Send+'static>(&self, k: K) {
+        self.with_data(|data: &mut SodiumCtxData| {
+            data.pre_post.push(Box::new(k));
+        });
+    }
     
     pub fn post<K:FnMut()+Send+'static>(&self, k:K) {
         self.with_data(|data: &mut SodiumCtxData| {
@@ -107,6 +115,16 @@ impl SodiumCtx {
         self.with_data(|data: &mut SodiumCtxData| {
             data.transaction_depth = data.transaction_depth - 1;
         });
+        // pre_post
+        let pre_post =
+            self.with_data(|data: &mut SodiumCtxData| {
+                let mut pre_post: Vec<Box<dyn FnMut()+Send>> = Vec::new();
+                mem::swap(&mut pre_post, &mut data.pre_post);
+                return pre_post;
+            });
+        for mut k in pre_post {
+            k();
+        }
         // post
         let post =
             self.with_data(|data: &mut SodiumCtxData| {
@@ -131,7 +149,7 @@ impl SodiumCtx {
             });
         {
             let node = node.clone();
-            self.post(move || {
+            self.pre_post(move || {
                 node.with_data(|data: &mut NodeData| data.visited = false);
             });
         }

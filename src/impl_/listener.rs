@@ -49,4 +49,14 @@ impl Listener {
             });
         }
     }
+
+    pub fn node_op(&self) -> Option<Node> {
+        self.with_data(|data: &mut ListenerData| data.node_op.clone())
+    }
+
+    pub fn with_data<R,K:FnOnce(&mut ListenerData)->R>(&self, k: K) -> R {
+        let mut l = self.data.lock();
+        let data: &mut ListenerData = l.as_mut().unwrap();
+        k(data)
+    }
 }

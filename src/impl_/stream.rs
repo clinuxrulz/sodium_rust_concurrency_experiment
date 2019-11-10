@@ -4,6 +4,7 @@ use crate::impl_::node::NodeData;
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::sodium_ctx::SodiumCtx;
+use crate::impl_::stream_loop::StreamLoop;
 use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 
@@ -205,6 +206,39 @@ impl<A:Send+'static> Stream<A> {
         let sodium_ctx = self.sodium_ctx();
         sodium_ctx.transaction(|| {
             Cell::_new(&sodium_ctx, self.clone(), a)
+        })
+    }
+
+    pub fn collect_lazy<B,S,F>(&self, init_state: Lazy<S>, f: F) -> Stream<B>
+        where B: Send + Clone + 'static,
+              S: Send + Clone + 'static,
+              F: IsLambda2<A,S,(B,S)> + Send + 'static
+    {
+        let sodium_ctx = self.sodium_ctx();
+        sodium_ctx.transaction(|| {
+            let ea = self.clone();
+            let es = StreamLoop::new(&sodium_ctx);
+            let s = es.stream().hold_lazy(init_state);
+            let ebs = ea.snapshot(&s, f);
+            let eb = ebs.map(|(ref a,ref _b):&(B,S)| a.clone());
+            let es_out = ebs.map(|(ref _a,ref b):&(B,S)| b.clone());
+            es.loop_(&es_out);
+            eb
+        })
+    }
+
+    pub fn accum_lazy<S,F>(&self, init_state: Lazy<S>, f: F) -> Cell<S>
+        where S: Send + Clone + 'static,
+              F: IsLambda2<A,S,S> + Send + 'static
+    {
+        let sodium_ctx = self.sodium_ctx();
+        let sodium_ctx = &sodium_ctx;
+        sodium_ctx.transaction(|| {
+            let es: StreamLoop<S> = StreamLoop::new(sodium_ctx);
+            let s = es.stream().hold_lazy(init_state);
+            let es_out = self.snapshot(&s, f);
+            es.loop_(&es_out);
+            s
         })
     }
 

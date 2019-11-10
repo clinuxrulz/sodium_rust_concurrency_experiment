@@ -91,6 +91,36 @@ impl<A:Clone+Send+'static> Stream<A> {
         self.filter(move |_: &A| cpred.sample())
     }
 
+    fn collect<B,S,F>(&self, init_state: S, f: F) -> Stream<B>
+        where B: Send + Clone + 'static,
+              S: Send + Clone + 'static,
+              F: IsLambda2<A,S,(B,S)> + Send + 'static
+    {
+        self.collect_lazy(Lazy::new(move || init_state.clone()), f)
+    }
+
+    fn collect_lazy<B,S,F>(&self, init_state: Lazy<S>, f: F) -> Stream<B>
+        where B: Send + Clone + 'static,
+              S: Send + Clone + 'static,
+              F: IsLambda2<A,S,(B,S)> + Send + 'static
+    {
+        Stream { impl_: self.impl_.collect_lazy(init_state, f) }
+    }
+
+    fn accum<S,F>(&self, init_state: S, f: F) -> Cell<S>
+        where S: Send + Clone + 'static,
+              F: IsLambda2<A,S,S> + Send + 'static
+    {
+        self.accum_lazy(Lazy::new(move || init_state.clone()), f)
+    }
+
+    fn accum_lazy<S,F>(&self, init_state: Lazy<S>, f: F) -> Cell<S>
+        where S: Send + Clone + 'static,
+              F: IsLambda2<A,S,S> + Send + 'static
+    {
+        Cell { impl_: self.impl_.accum_lazy(init_state, f) }
+    }
+
     pub fn listen_weak<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
         Listener { impl_: self.impl_.listen_weak(k) }
     }

@@ -91,7 +91,7 @@ impl<A:Clone+Send+'static> Stream<A> {
         self.filter(move |_: &A| cpred.sample())
     }
 
-    fn collect<B,S,F>(&self, init_state: S, f: F) -> Stream<B>
+    pub fn collect<B,S,F>(&self, init_state: S, f: F) -> Stream<B>
         where B: Send + Clone + 'static,
               S: Send + Clone + 'static,
               F: IsLambda2<A,S,(B,S)> + Send + 'static
@@ -99,7 +99,7 @@ impl<A:Clone+Send+'static> Stream<A> {
         self.collect_lazy(Lazy::new(move || init_state.clone()), f)
     }
 
-    fn collect_lazy<B,S,F>(&self, init_state: Lazy<S>, f: F) -> Stream<B>
+    pub fn collect_lazy<B,S,F>(&self, init_state: Lazy<S>, f: F) -> Stream<B>
         where B: Send + Clone + 'static,
               S: Send + Clone + 'static,
               F: IsLambda2<A,S,(B,S)> + Send + 'static
@@ -107,14 +107,14 @@ impl<A:Clone+Send+'static> Stream<A> {
         Stream { impl_: self.impl_.collect_lazy(init_state, f) }
     }
 
-    fn accum<S,F>(&self, init_state: S, f: F) -> Cell<S>
+    pub fn accum<S,F>(&self, init_state: S, f: F) -> Cell<S>
         where S: Send + Clone + 'static,
               F: IsLambda2<A,S,S> + Send + 'static
     {
         self.accum_lazy(Lazy::new(move || init_state.clone()), f)
     }
 
-    fn accum_lazy<S,F>(&self, init_state: Lazy<S>, f: F) -> Cell<S>
+    pub fn accum_lazy<S,F>(&self, init_state: Lazy<S>, f: F) -> Cell<S>
         where S: Send + Clone + 'static,
               F: IsLambda2<A,S,S> + Send + 'static
     {

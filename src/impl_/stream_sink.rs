@@ -45,7 +45,6 @@ impl<A:Send+'static> StreamSink<A> {
             self.sodium_ctx.with_data(|data: &mut SodiumCtxData| {
                 data.changed_nodes.push(node);
             });
-            //self.sodium_ctx.add_dependents_to_changed_nodes(self.stream.node());
             self.stream._send(a);
         });
     }

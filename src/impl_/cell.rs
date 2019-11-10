@@ -3,6 +3,7 @@ use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
 use crate::impl_::sodium_ctx::SodiumCtx;
+use crate::impl_::sodium_ctx::SodiumCtxData;
 use crate::impl_::stream::Stream;
 use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
@@ -128,8 +129,10 @@ impl<A:Send+'static> Cell<A> {
                 sodium_ctx.post(move || {
                     let a = self_.with_data(|data: &mut CellData<A>| data.value.run());
                     sodium_ctx2.transaction(|| {
+                        let node = spark.node();
+                        node.with_data(|data: &mut NodeData| { data.changed = true; });
+                        sodium_ctx2.with_data(|data: &mut SodiumCtxData| data.changed_nodes.push(node));
                         spark._send(a.clone());
-                        sodium_ctx2.add_dependents_to_changed_nodes(spark.node());
                     });
                 });
             }

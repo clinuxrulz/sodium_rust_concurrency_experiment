@@ -75,9 +75,9 @@ impl Node {
         });
     }
 
-    pub fn add_keep_alive(&self, node: Node) {
+    pub fn add_keep_alive(&self, node: &Node) {
         self.with_data(|data: &mut NodeData| {
-            data.keep_alive.push(node);
+            data.keep_alive.push(node.clone());
         });
     }
 

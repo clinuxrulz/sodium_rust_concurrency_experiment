@@ -250,18 +250,29 @@ impl<A:Send+'static> Stream<A> {
             {
                 let self_ = self.clone();
                 let s = s.clone();
+                let sodium_ctx = sodium_ctx.clone();
                 node = Node::new(
                     move || {
-                        self_.with_firing_op(|firing_op: &mut Option<A>| {
-                            if let Some(firing) = firing_op {
-                                s._send(firing.clone());
+                        let self_ = self_.clone();
+                        let s = s.clone();
+                        let sodium_ctx2 = sodium_ctx.clone();
+                        let firing_op =
+                            self_.with_firing_op(|firing_op: &mut Option<A>| {
+                                firing_op.clone()
+                            });
+                        sodium_ctx.post(move || {
+                            if let Some(ref firing) = &firing_op {
+                                sodium_ctx2.transaction(|| {
+                                    s._send(firing.clone());
+                                    sodium_ctx2.add_dependents_to_changed_nodes(s.node());
+                                });
                             }
                         });
                     },
                     vec![self.node()]
                 );
             }
-            s.node().add_keep_alive(node);
+            s.node().add_keep_alive(&node);
             s
         })
     }

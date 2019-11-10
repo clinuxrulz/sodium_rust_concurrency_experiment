@@ -108,6 +108,10 @@ impl<A:Send+'static> Cell<A> {
         self.with_data(|data: &mut CellData<A>| data.value.run())
     }
 
+    pub fn sample_lazy(&self) -> Lazy<A> {
+        self.with_data(|data: &mut CellData<A>| data.value.clone())
+    }
+
     pub fn updates(&self) -> Stream<A> {
         self.with_data(|data| data.stream.clone())
     }
@@ -138,39 +142,52 @@ impl<A:Send+'static> Cell<A> {
         self.updates().map(f).hold(init)
     }
 
-    pub fn lift2<B:Send+Clone+'static,C:Send+Clone+'static,FN:IsLambda2<A,B,C>+Send+'static>(&self, cb: &Cell<B>, mut f: FN) -> Cell<C> where A: Clone {
+    pub fn lift2<B:Send+Clone+'static,C:Send+Clone+'static,FN:IsLambda2<A,B,C>+Send+'static>(&self, cb: &Cell<B>, f: FN) -> Cell<C> where A: Clone {
         let sodium_ctx = self.sodium_ctx();
-        let lhs = self.sample();
-        let rhs = cb.sample();
-        let init = f.call(&lhs, &rhs);
-        let state: Arc<Mutex<(A,B)>> = Arc::new(Mutex::new((lhs, rhs)));
+        let lhs = self.sample_lazy();
+        let rhs = cb.sample_lazy();
+        let init: Lazy<C>;
+        let f = Arc::new(Mutex::new(f));
+        {
+            let lhs = lhs.clone();
+            let rhs = rhs.clone();
+            let f = f.clone();
+            init = Lazy::new(move || {
+                let mut l = f.lock();
+                let f = l.as_mut().unwrap();
+                f.call(&lhs.run(), &rhs.run())
+            });
+        }
+        let state: Arc<Mutex<(Lazy<A>,Lazy<B>)>> = Arc::new(Mutex::new((lhs, rhs)));
         let s1: Stream<()>;
         let s2: Stream<()>;
         {
             let state = state.clone();
             s1 = self.updates().map(move |a: &A| {
                 let mut l = state.lock();
-                let state2: &mut (A,B) = l.as_mut().unwrap();
-                state2.0 = a.clone();
+                let state2: &mut (Lazy<A>,Lazy<B>) = l.as_mut().unwrap();
+                state2.0 = Lazy::of_value(a.clone());
             });
         }
         {
             let state = state.clone();
             s2 = cb.updates().map(move |b: &B| {
                 let mut l = state.lock();
-                let state2: &mut (A,B) = l.as_mut().unwrap();
-                state2.1 = b.clone();
+                let state2: &mut (Lazy<A>,Lazy<B>) = l.as_mut().unwrap();
+                state2.1 = Lazy::of_value(b.clone());
             });
         }
         let s = s1.or_else(&s2).map(move |_: &()| {
             let l = state.lock();
-            let state2: &(A,B) = l.as_ref().unwrap();
-            f.call(&state2.0, &state2.1)
+            let state2: &(Lazy<A>,Lazy<B>) = l.as_ref().unwrap();
+            let mut l = f.lock();
+            let f = l.as_mut().unwrap();
+            f.call(&state2.0.run(), &state2.1.run())
         });
         Cell::_new(
             &sodium_ctx,
             s,
-            Lazy::of_value(init)
+            init
         )
     }
 

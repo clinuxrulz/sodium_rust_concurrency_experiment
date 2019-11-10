@@ -5,6 +5,7 @@ use crate::impl_::lambda::IsLambda3;
 use crate::impl_::lambda::IsLambda4;
 use crate::impl_::lambda::IsLambda5;
 use crate::impl_::lambda::IsLambda6;
+use crate::impl_::lazy::Lazy;
 use crate::listener::Listener;
 use crate::sodium_ctx::SodiumCtx;
 use crate::stream::Stream;
@@ -27,6 +28,10 @@ impl<A:Clone+Send+'static> Cell<A> {
 
     pub fn sample(&self) -> A {
         self.impl_.sample()
+    }
+
+    pub fn sample_lazy(&self) -> Lazy<A> {
+        self.impl_.sample_lazy()
     }
 
     pub fn node(&self) -> Node {

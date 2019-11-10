@@ -48,9 +48,18 @@ impl<A:Send+'static> Cell<A> {
 
     pub fn _new(sodium_ctx: &SodiumCtx, stream: Stream<A>, value: Lazy<A>) -> Cell<A> where A: Clone {
         let stream2 = stream.clone();
+        let init_value =
+            stream.with_firing_op(|firing_op: &mut Option<A>| {
+                if let Some(ref firing) = firing_op {
+                    let firing = firing.clone();
+                    Lazy::new(move || firing.clone())
+                } else {
+                    value
+                }
+            });
         let c = Cell {
             data: Arc::new(Mutex::new(CellData {
-                value: value,
+                value: init_value,
                 next_value_op: None,
                 stream: stream.clone(),
                 node: sodium_ctx.null_node()
@@ -306,9 +315,20 @@ impl<A:Send+'static> Cell<A> {
     }
 
     pub fn switch_c(cca: &Cell<Cell<A>>) -> Cell<A> where A: Clone {
-        Cell::switch_s(&cca.map(|ca: &Cell<A>| ca.updates()))
-            .or_else(&cca.updates().map(|ca: &Cell<A>| ca.sample()))
-            .hold(cca.sample().sample())
+        let cca2 = cca.clone();
+        cca
+            .updates()
+            .map(
+                |ca:&Cell<A>|
+                    ca.with_data(|data: &mut CellData<A>| {
+                        if let Some(ref next_value) = &data.next_value_op {
+                            return next_value.clone();
+                        }
+                        return data.value.run();
+                    })
+            )
+            .or_else(&Cell::switch_s(&cca.map(|ca: &Cell<A>| ca.updates())))
+            .hold_lazy(Lazy::new(move || cca2.sample().sample()))
     }
 
     pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, k: K) -> Listener where A: Clone {

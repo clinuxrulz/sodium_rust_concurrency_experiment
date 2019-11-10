@@ -1,4 +1,5 @@
 mod impl_tests;
+mod cell_test;
 mod stream_test;
 
 use crate::SodiumCtx;

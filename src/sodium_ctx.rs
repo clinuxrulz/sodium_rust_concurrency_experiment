@@ -1,3 +1,4 @@
+use crate::Cell;
 use crate::CellSink;
 use crate::CellLoop;
 use crate::StreamSink;
@@ -11,6 +12,10 @@ pub struct SodiumCtx {
 impl SodiumCtx {
     pub fn new() -> SodiumCtx {
         SodiumCtx { impl_: SodiumCtxImpl::new() }
+    }
+
+    pub fn new_cell<A:Clone+Send+'static>(&self, a: A) -> Cell<A> {
+        Cell::new(self, a)
     }
 
     pub fn new_cell_sink<A:Clone+Send+'static>(&self, a: A) -> CellSink<A> {

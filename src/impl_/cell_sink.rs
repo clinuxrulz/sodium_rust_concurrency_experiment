@@ -7,6 +7,15 @@ pub struct CellSink<A> {
     stream_sink: StreamSink<A>
 }
 
+impl<A> Clone for CellSink<A> {
+    fn clone(&self) -> Self {
+        CellSink {
+            cell: self.cell.clone(),
+            stream_sink: self.stream_sink.clone()
+        }
+    }
+}
+
 impl<A:Send+Clone+'static> CellSink<A> {
     pub fn new(sodium_ctx: &SodiumCtx, a: A) -> CellSink<A> {
         let stream_sink = StreamSink::new(sodium_ctx);

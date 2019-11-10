@@ -6,6 +6,14 @@ pub struct StreamSink<A> {
     pub impl_: StreamSinkImpl<A>
 }
 
+impl<A> Clone for StreamSink<A> {
+    fn clone(&self) -> Self {
+        StreamSink {
+            impl_: self.impl_.clone()
+        }
+    }
+}
+
 impl<A:Clone+Send+'static> StreamSink<A> {
     pub fn new(sodium_ctx: &SodiumCtx) -> StreamSink<A> {
         StreamSink { impl_: StreamSinkImpl::new(&sodium_ctx.impl_) }

@@ -1,10 +1,18 @@
 use crate::impl_::stream::Stream;
 use crate::impl_::sodium_ctx::SodiumCtx;
 
-#[derive(Clone)]
 pub struct StreamSink<A> {
     stream: Stream<A>,
     sodium_ctx: SodiumCtx
+}
+
+impl<A> Clone for StreamSink<A> {
+    fn clone(&self) -> Self {
+        StreamSink {
+            stream: self.stream.clone(),
+            sodium_ctx: self.sodium_ctx.clone()
+        }
+    }
 }
 
 impl<A:Send+'static> StreamSink<A> {

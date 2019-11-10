@@ -91,6 +91,10 @@ impl<A:Clone+Send+'static> Stream<A> {
         self.filter(move |_: &A| cpred.sample())
     }
 
+    pub fn once(&self) -> Stream<A> {
+        Stream { impl_: self.impl_.once() }
+    }
+
     pub fn collect<B,S,F>(&self, init_state: S, f: F) -> Stream<B>
         where B: Send + Clone + 'static,
               S: Send + Clone + 'static,

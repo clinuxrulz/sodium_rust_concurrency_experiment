@@ -3,5 +3,5 @@ mod stream_test;
 
 use crate::SodiumCtx;
 
-pub fn assert_memory_freed(sodium_ctx: &SodiumCtx) {
+pub fn assert_memory_freed(_sodium_ctx: &SodiumCtx) {
 }

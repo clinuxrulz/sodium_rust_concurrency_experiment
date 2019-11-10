@@ -12,4 +12,8 @@ impl Operational {
     pub fn value<A:Clone+Send+'static>(ca: &Cell<A>) -> Stream<A> {
         Stream { impl_: ca.impl_.value() }
     }
+
+    pub fn defer<A:Clone+Send+'static>(sa: &Stream<A>) -> Stream<A> {
+        Stream { impl_: sa.impl_.defer() }
+    }
 }

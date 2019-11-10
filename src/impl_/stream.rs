@@ -242,6 +242,62 @@ impl<A:Send+'static> Stream<A> {
         })
     }
 
+    pub fn defer(&self) -> Stream<A> where A: Clone {
+        let sodium_ctx = self.sodium_ctx();
+        sodium_ctx.transaction(|| {
+            let s = Stream::new(&self.sodium_ctx());
+            let node: Node;
+            {
+                let self_ = self.clone();
+                let s = s.clone();
+                node = Node::new(
+                    move || {
+                        self_.with_firing_op(|firing_op: &mut Option<A>| {
+                            if let Some(firing) = firing_op {
+                                s._send(firing.clone());
+                            }
+                        });
+                    },
+                    vec![self.node()]
+                );
+            }
+            s.node().add_keep_alive(node);
+            s
+        })
+    }
+
+    pub fn once(&self) -> Stream<A> where A: Clone {
+        let _self = self.clone();
+        let sodium_ctx = self.sodium_ctx().clone();
+        Stream::_new(
+            &sodium_ctx,
+            |s: &Stream<A>| {
+                let _s = s.clone();
+                let sodium_ctx = sodium_ctx.clone();
+                Node::new(
+                    move || {
+                        _self.with_firing_op(|firing_op: &mut Option<A>| {
+                            if let Some(ref firing) = firing_op {
+                                _s._send(firing.clone());
+                                let node = _s.node();
+                                sodium_ctx.post(move || {
+                                    let deps =
+                                        node.with_data(|data: &mut NodeData| {
+                                            data.dependencies.clone()
+                                        });
+                                    for dep in deps {
+                                        node.remove_dependency(&dep);
+                                    }
+                                });
+                            }
+                        })
+                    },
+                    vec![self.node()]
+                )
+            }
+        )
+    }
+
     pub fn _listen<K:IsLambda1<A,()>+Send+'static>(&self, mut k: K, weak: bool) -> Listener {
         let self_ = self.clone();
         let node =

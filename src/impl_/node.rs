@@ -17,7 +17,8 @@ pub struct NodeData {
     pub changed: bool,
     pub update: Box<dyn FnMut()+Send>,
     pub dependencies: Vec<Node>,
-    pub dependents: Vec<WeakNode>
+    pub dependents: Vec<WeakNode>,
+    pub keep_alive: Vec<Node>
 }
 
 impl Node {
@@ -31,7 +32,8 @@ impl Node {
                             changed: false,
                             update: Box::new(update),
                             dependencies: dependencies.clone(),
-                            dependents: Vec::new()
+                            dependents: Vec::new(),
+                            keep_alive: Vec::new()
                         }
                     ))
             };
@@ -70,6 +72,12 @@ impl Node {
                     false
                 }
             })
+        });
+    }
+
+    pub fn add_keep_alive(&self, node: Node) {
+        self.with_data(|data: &mut NodeData| {
+            data.keep_alive.push(node);
         });
     }
 

@@ -1,11 +1,8 @@
 use crate::Cell;
-//use crate::CellLoop;
-use crate::CellSink;
 use crate::lambda1;
 use crate::Operational;
 use crate::SodiumCtx;
 use crate::Stream;
-//use crate::StreamLoop;
 use crate::StreamSink;
 use crate::tests::assert_memory_freed;
 
@@ -307,7 +304,7 @@ fn loop_() {
         let sa = sodium_ctx.new_stream_sink();
         let sc = sodium_ctx.transaction(
             || {
-                let mut sb = sodium_ctx.new_stream_loop();
+                let sb = sodium_ctx.new_stream_loop();
                 let sc_ =
                     sa
                         .stream()
@@ -442,7 +439,6 @@ fn accum() {
     assert_memory_freed(sodium_ctx);
 }
 
-/*
 #[test]
 fn once() {
     let mut sodium_ctx = SodiumCtx::new();
@@ -455,18 +451,22 @@ fn once() {
             let out = out.clone();
             l =
                 s
+                    .stream()
                     .once()
                     .listen(
-                        move |a|
+                        move |a: &&'static str|
                             out.lock().as_mut().unwrap().push(*a)
                     );
         }
-        s.send(&"A");
-        s.send(&"B");
-        s.send(&"C");
-        l.debug();
+        s.send("A");
+        s.send("B");
+        s.send("C");
         l.unlisten();
-        assert_eq!(vec!["A"], *out.borrow());
+        {
+            let lock = out.lock();
+            let out: &Vec<&'static str> = lock.as_ref().unwrap();
+            assert_eq!(vec!["A"], *out);
+        }
     }
     assert_memory_freed(sodium_ctx);
 }
@@ -477,29 +477,32 @@ fn defer() {
     let sodium_ctx = &mut sodium_ctx;
     {
         let s = sodium_ctx.new_stream_sink();
-        let c = s.hold(" ");
+        let c = s.stream().hold(" ");
         let out = Arc::new(Mutex::new(Vec::new()));
         let l;
         {
             let out = out.clone();
             l =
                 Operational
-                    ::defer(&s)
-                    .snapshot(&c)
+                    ::defer(&s.stream())
+                    .snapshot1(&c)
                     .listen(
-                        move |a|
+                        move |a: &&'static str|
                             out.lock().as_mut().unwrap().push(*a)
                     );
         }
-        s.send(&"C");
-        s.send(&"B");
-        s.send(&"A");
+        s.send("C");
+        s.send("B");
+        s.send("A");
         l.unlisten();
-        assert_eq!(vec!["C", "B", "A"], *out.borrow());
+        {
+            let lock = out.lock();
+            let out: &Vec<&'static str> = lock.as_ref().unwrap();
+            assert_eq!(vec!["C", "B", "A"], *out);
+        }
     }
     assert_memory_freed(sodium_ctx);
 }
-*/
 
 #[test]
 fn hold() {

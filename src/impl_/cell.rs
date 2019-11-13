@@ -337,19 +337,81 @@ impl<A:Send+'static> Cell<A> {
 
     pub fn switch_c(cca: &Cell<Cell<A>>) -> Cell<A> where A: Clone {
         let cca2 = cca.clone();
-        cca
-            .updates()
-            .map(
-                |ca:&Cell<A>|
-                    ca.with_data(|data: &mut CellData<A>| {
-                        if let Some(ref next_value) = &data.next_value_op {
-                            return next_value.clone();
-                        }
-                        return data.value.run();
-                    })
-            )
-            .or_else(&Cell::switch_s(&cca.map(|ca: &Cell<A>| ca.updates())))
-            .hold_lazy(Lazy::new(move || cca2.sample().sample()))
+        let cca = cca.clone();
+        let sodium_ctx = cca.sodium_ctx();
+        Stream::_new(
+            &sodium_ctx,
+            |sa: &Stream<A>| {
+                let inner_s: Arc<Mutex<Stream<A>>> = Arc::new(Mutex::new(cca.sample().updates()));
+                let node1: Node;
+                {
+                    let sa = sa.clone();
+                    let inner_s = inner_s.clone();
+                    node1 = Node::new(
+                        move || {
+                            let l = inner_s.lock();
+                            let inner_s: &Stream<A> = l.as_ref().unwrap();
+                            inner_s.with_firing_op(|firing_op: &mut Option<A>| {
+                                if let Some(ref firing) = firing_op {
+                                    sa._send(firing.clone());
+                                }
+                            });
+                        },
+                        vec![cca.sample().updates().node()]
+                    );
+                }
+                let node2: Node;
+                {
+                    let sa = sa.clone();
+                    let node1: Node = node1.clone();
+                    let cca2 = cca.clone();
+                    let sodium_ctx = sodium_ctx.clone();
+                    node2 = Node::new(
+                        move || {
+                            cca.updates().with_firing_op(|firing_op: &mut Option<Cell<A>>| {
+                                if let Some(ref firing) = firing_op {
+                                    let firing = firing.clone();
+                                    let node1 = node1.clone();
+                                    let inner_s = inner_s.clone();
+                                    sa._send(firing.sample());
+                                    let firing = firing.updates();
+                                    firing.with_firing_op(|firing_op2: &mut Option<A>| {
+                                        if let Some(ref firing2) = firing_op2 {
+                                            sa._send(firing2.clone());
+                                        }
+                                    });
+                                    sodium_ctx.pre_post(move || {
+                                        let old_deps =
+                                        node1.with_data(|data: &mut NodeData| {
+                                            data.dependencies.clone()
+                                        });
+                                        for dep in old_deps {
+                                            node1.remove_dependency(&dep);
+                                        }
+                                        node1.add_dependency(firing.node());
+                                        let mut l = inner_s.lock();
+                                        let inner_s: &mut Stream<A> = l.as_mut().unwrap();
+                                        *inner_s = firing.clone();
+                                    });
+                                }
+                            });
+                        },
+                        vec![cca2.updates().node()]
+                    );
+                }
+                let node3 = Node::new(|| {}, vec![node1, node2]);
+                let node3_update;
+                {
+                    let node3 = node3.clone();
+                    node3_update = move || {
+                        node3.with_data(|data: &mut NodeData| data.changed = true);
+                    };
+                }
+                node3.with_data(|data: &mut NodeData| data.update = Box::new(node3_update));
+                return node3;
+            }
+        )
+        .hold_lazy(Lazy::new(move || cca2.sample().sample()))
     }
 
     pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, k: K) -> Listener where A: Clone {

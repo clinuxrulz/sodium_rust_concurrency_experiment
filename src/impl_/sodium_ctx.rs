@@ -148,6 +148,8 @@ impl SodiumCtx {
         for mut k in post {
             k();
         }
+        // gc
+        self.collect_cycles()
     }
 
     pub fn update_node(&self, node: &Node) {
@@ -216,5 +218,12 @@ impl SodiumCtx {
                 handle.join().unwrap();
             }
         }
+    }
+
+    pub fn collect_cycles(&self) {
+        self.with_data(|data: &mut SodiumCtxData| {
+            // TODO: Collect cycles here.
+            data.gc_roots.clear();
+        });
     }
 }

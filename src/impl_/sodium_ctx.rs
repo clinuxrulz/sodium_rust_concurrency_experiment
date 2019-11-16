@@ -1,6 +1,7 @@
 use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
+use crate::impl_::node::NodeGcData;
 use crate::impl_::node::WeakNode;
 
 use std::mem;
@@ -21,6 +22,7 @@ pub struct SodiumCtxData {
     pub pre_post: Vec<Box<dyn FnMut()+Send>>,
     pub post: Vec<Box<dyn FnMut()+Send>>,
     pub keep_alive: Vec<Listener>,
+    pub collecting_cycles: bool,
     pub gc_roots: Vec<WeakNode>
 }
 
@@ -37,6 +39,7 @@ impl SodiumCtx {
                         pre_post: Vec::new(),
                         post: Vec::new(),
                         keep_alive: Vec::new(),
+                        collecting_cycles: false,
                         gc_roots: Vec::new()
                     }
                 ))
@@ -221,9 +224,76 @@ impl SodiumCtx {
     }
 
     pub fn collect_cycles(&self) {
+        let bail =
+            self.with_data(|data: &mut SodiumCtxData| {
+                if data.collecting_cycles {
+                    return true;
+                }
+                data.collecting_cycles = true;
+                return false;
+            });
+        if bail {
+            return;
+        }
+        let mut gc_roots: Vec<WeakNode> = Vec::new();
         self.with_data(|data: &mut SodiumCtxData| {
-            // TODO: Collect cycles here.
-            data.gc_roots.clear();
+            mem::swap(&mut gc_roots, &mut data.gc_roots);
         });
+        for gc_root in gc_roots {
+            let gc_root_op = gc_root.upgrade();
+            if let Some(gc_root) = gc_root_op {
+                self.gc_process_root(gc_root);
+            }
+        }
+        self.with_data(|data: &mut SodiumCtxData| data.collecting_cycles = false);
+    }
+
+    pub fn gc_process_root(&self, node: Node) {
+        let mut ref_count_adj: usize = 0;
+        let mut visited: Vec<Node> = Vec::new();
+        self.gc_calc_ref_count_adj(&node, None, &mut ref_count_adj, &mut visited);
+        // "+ 1" for current reference in this method
+        if node.ref_count() == ref_count_adj + 1 {
+            self.gc_free_node(&node);
+        }
+    }
+
+    pub fn gc_calc_ref_count_adj(&self, node: &Node, at_node_op: Option<&Node>, ref_count_adj: &mut usize, visited: &mut Vec<Node>) {
+        let next_nodes: Vec<Node>;
+        if let Some(at_node) = at_node_op {
+            if Arc::ptr_eq(&node.data, &at_node.data) {
+                *ref_count_adj = *ref_count_adj + 1;
+                return;
+            }
+            let bail =
+                at_node.with_gc_data(|data: &mut NodeGcData| {
+                    if data.visited {
+                        return true;
+                    }
+                    data.visited = true;
+                    return false;
+                });
+            if bail {
+                return;
+            }
+            visited.push(at_node.clone());
+            next_nodes = at_node.with_data(|data: &mut NodeData| data.dependencies.clone());
+        } else {
+            next_nodes = node.with_data(|data: &mut NodeData| data.dependencies.clone());
+        }
+        for next_node in next_nodes {
+            self.gc_calc_ref_count_adj(node, Some(&next_node), ref_count_adj, visited);
+        }
+    }
+
+    pub fn gc_free_node(&self, node: &Node) {
+        let dependencies =
+            node.with_data(|data: &mut NodeData| {
+                data.update = Box::new(|| {});
+                data.dependencies.clone()
+            });
+        for dependency in dependencies {
+            node.remove_dependency(&dependency);
+        }
     }
 }

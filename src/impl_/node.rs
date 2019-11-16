@@ -5,16 +5,16 @@ use std::sync::Weak;
 use crate::impl_::sodium_ctx::SodiumCtx;
 
 pub struct Node {
-    data: Arc<Mutex<NodeData>>,
-    ref_count: Arc<Mutex<usize>>,
-    sodium_ctx: SodiumCtx
+    pub data: Arc<Mutex<NodeData>>,
+    pub gc_data: Arc<Mutex<NodeGcData>>,
+    pub sodium_ctx: SodiumCtx
 }
 
 #[derive(Clone)]
 pub struct WeakNode {
-    data: Weak<Mutex<NodeData>>,
-    ref_count: Arc<Mutex<usize>>,
-    sodium_ctx: SodiumCtx
+    pub data: Weak<Mutex<NodeData>>,
+    pub gc_data: Arc<Mutex<NodeGcData>>,
+    pub sodium_ctx: SodiumCtx
 }
 
 pub struct NodeData {
@@ -26,13 +26,18 @@ pub struct NodeData {
     pub keep_alive: Vec<Node>
 }
 
+pub struct NodeGcData {
+    pub ref_count: usize,
+    pub visited: bool
+}
+
 impl Clone for Node {
     fn clone(&self) -> Self {
         self.inc_ref_count();
         Node {
             data: self.data.clone(),
             sodium_ctx: self.sodium_ctx.clone(),
-            ref_count: self.ref_count.clone()
+            gc_data: self.gc_data.clone()
         }
     }
 }
@@ -61,7 +66,12 @@ impl Node {
                             keep_alive: Vec::new()
                         }
                     )),
-                ref_count: Arc::new(Mutex::new(1)),
+                gc_data: Arc::new(Mutex::new(
+                    NodeGcData {
+                        ref_count: 1,
+                        visited: false
+                    }
+                )),
                 sodium_ctx: sodium_ctx.clone()
             };
         for dependency in dependencies {
@@ -72,31 +82,35 @@ impl Node {
         return result;
     }
 
+    pub fn with_gc_data<R,K:FnOnce(&mut NodeGcData)->R>(&self, k: K) -> R {
+        let mut l = self.gc_data.lock();
+        let gc_data: &mut NodeGcData = l.as_mut().unwrap();
+        k(gc_data)
+    }
+
     pub fn ref_count(&self) -> usize {
-        let l = self.ref_count.lock();
-        let ref_count: &usize = l.as_ref().unwrap();
-        *ref_count
+        self.with_gc_data(|data: &mut NodeGcData| data.ref_count)
     }
 
     pub fn inc_ref_count(&self) -> usize {
-        let mut l = self.ref_count.lock();
-        let ref_count: &mut usize = l.as_mut().unwrap();
-        *ref_count = *ref_count + 1;
-        *ref_count
+        self.with_gc_data(|data: &mut NodeGcData| {
+            data.ref_count = data.ref_count + 1;
+            data.ref_count
+        })
     }
 
     pub fn dec_ref_count(&self) -> usize {
-        let mut l = self.ref_count.lock();
-        let ref_count: &mut usize = l.as_mut().unwrap();
-        *ref_count = *ref_count - 1;
-        *ref_count
+        self.with_gc_data(|data: &mut NodeGcData| {
+            data.ref_count = data.ref_count - 1;
+            data.ref_count
+        })
     }
 
     pub fn downgrade(this: &Self) -> WeakNode {
         WeakNode {
             data: Arc::downgrade(&this.data),
-            sodium_ctx: this.sodium_ctx.clone(),
-            ref_count: this.ref_count.clone()
+            gc_data: this.gc_data.clone(),
+            sodium_ctx: this.sodium_ctx.clone()
         }
     }
 
@@ -140,7 +154,7 @@ impl Node {
 
 impl WeakNode {
     pub fn upgrade(&self) -> Option<Node> {
-        let node_op = self.data.upgrade().map(|data| Node { data, sodium_ctx: self.sodium_ctx.clone(), ref_count: self.ref_count.clone() });
+        let node_op = self.data.upgrade().map(|data| Node { data, sodium_ctx: self.sodium_ctx.clone(), gc_data: self.gc_data.clone() });
         if let Some(ref node) = &node_op {
             node.inc_ref_count();
         }

@@ -124,6 +124,7 @@ impl<A:Send+'static> Stream<A> {
             |s: &Stream<B>| {
                 let _s = s.clone();
                 Node::new(
+                    &sodium_ctx,
                     move || {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
@@ -145,6 +146,7 @@ impl<A:Send+'static> Stream<A> {
             |s: &Stream<A>| {
                 let _s = s.clone();
                 Node::new(
+                    &sodium_ctx,
                     move || {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
                             let firing_op2 = firing_op.clone().filter(|firing| pred.call(firing));
@@ -173,6 +175,7 @@ impl<A:Send+'static> Stream<A> {
                 let _s = s.clone();
                 let _s2 = s2.clone();
                 Node::new(
+                    &sodium_ctx,
                     move || {
                         _self.with_firing_op(|firing1_op: &mut Option<A>| {
                             _s2.with_firing_op(|firing2_op: &mut Option<A>| {
@@ -267,7 +270,9 @@ impl<A:Send+'static> Stream<A> {
             |s: &Stream<A>| {
                 let _s = s.clone();
                 let sodium_ctx = sodium_ctx.clone();
+                let sodium_ctx2 = sodium_ctx.clone();
                 Node::new(
+                    &sodium_ctx2,
                     move || {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
@@ -295,6 +300,7 @@ impl<A:Send+'static> Stream<A> {
         let self_ = self.clone();
         let node =
             Node::new(
+                &self.sodium_ctx(),
                 move || {
                     self_.with_data(|data: &mut StreamData<A>| {
                         for firing in &data.firing_op {

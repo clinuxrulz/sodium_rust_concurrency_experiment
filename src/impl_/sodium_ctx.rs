@@ -14,13 +14,14 @@ pub struct SodiumCtx {
 }
 
 pub struct SodiumCtxData {
-    pub null_node: Node,
+    pub null_node_op: Option<Node>,
     pub changed_nodes: Vec<Node>,
     pub visited_nodes: Vec<Node>,
     pub transaction_depth: u32,
     pub pre_post: Vec<Box<dyn FnMut()+Send>>,
     pub post: Vec<Box<dyn FnMut()+Send>>,
-    pub keep_alive: Vec<Listener>
+    pub keep_alive: Vec<Listener>,
+    pub gc_roots: Vec<WeakNode>
 }
 
 impl SodiumCtx {
@@ -29,20 +30,32 @@ impl SodiumCtx {
             data:
                 Arc::new(Mutex::new(
                     SodiumCtxData {
-                        null_node: Node::new(|| {}, Vec::new()),
+                        null_node_op: None,
                         changed_nodes: Vec::new(),
                         visited_nodes: Vec::new(),
                         transaction_depth: 0,
                         pre_post: Vec::new(),
                         post: Vec::new(),
-                        keep_alive: Vec::new()
+                        keep_alive: Vec::new(),
+                        gc_roots: Vec::new()
                     }
                 ))
         }
     }
 
     pub fn null_node(&self) -> Node {
-        self.with_data(|data: &mut SodiumCtxData| data.null_node.clone())
+        self.with_data(|data: &mut SodiumCtxData| {
+            if let Some(ref null_node) = data.null_node_op {
+                return null_node.clone();
+            }
+            let null_node = Node::new(self, || {}, Vec::new());
+            data.null_node_op = Some(null_node.clone());
+            return null_node;
+        })
+    }
+
+    pub fn add_gc_root(&self, node: &Node) {
+        self.with_data(|data: &mut SodiumCtxData| data.gc_roots.push(Node::downgrade(node)));
     }
 
     pub fn transaction<R,K:FnOnce()->R>(&self, k:K) -> R {

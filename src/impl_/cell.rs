@@ -70,7 +70,9 @@ impl<A:Send+'static> Cell<A> {
         let node: Node;
         {
             let c = c.clone();
+            let sodium_ctx2 = sodium_ctx.clone();
             node = Node::new(
+                &sodium_ctx2,
                 move || {
                     let firing_op = stream2.with_firing_op(|firing_op| firing_op.clone());
                     if let Some(firing) = firing_op {
@@ -286,6 +288,7 @@ impl<A:Send+'static> Cell<A> {
                 {
                     let inner_s = inner_s.clone();
                     node1 = Node::new(
+                        &sodium_ctx,
                         move || {
                             let l = inner_s.lock();
                             let inner_s: &Stream<A> = l.as_ref().unwrap();
@@ -303,7 +306,9 @@ impl<A:Send+'static> Cell<A> {
                     let node1: Node = node1.clone();
                     let csa2 = csa.clone();
                     let sodium_ctx = sodium_ctx.clone();
+                    let sodium_ctx2 = sodium_ctx.clone();
                     node2 = Node::new(
+                        &sodium_ctx2,
                         move || {
                             csa.updates().with_firing_op(|firing_op: &mut Option<Stream<A>>| {
                                 if let Some(ref firing) = firing_op {
@@ -348,6 +353,7 @@ impl<A:Send+'static> Cell<A> {
                     let sa = sa.clone();
                     let inner_s = inner_s.clone();
                     node1 = Node::new(
+                        &sodium_ctx,
                         move || {
                             let l = inner_s.lock();
                             let inner_s: &Stream<A> = l.as_ref().unwrap();
@@ -366,7 +372,9 @@ impl<A:Send+'static> Cell<A> {
                     let node1: Node = node1.clone();
                     let cca2 = cca.clone();
                     let sodium_ctx = sodium_ctx.clone();
+                    let sodium_ctx2 = sodium_ctx.clone();
                     node2 = Node::new(
+                        &sodium_ctx2,
                         move || {
                             cca.updates().with_firing_op(|firing_op: &mut Option<Cell<A>>| {
                                 if let Some(ref firing) = firing_op {
@@ -399,7 +407,7 @@ impl<A:Send+'static> Cell<A> {
                         vec![cca2.updates().node()]
                     );
                 }
-                let node3 = Node::new(|| {}, vec![node1, node2]);
+                let node3 = Node::new(&sodium_ctx, || {}, vec![node1, node2]);
                 let node3_update;
                 {
                     let node3 = node3.clone();

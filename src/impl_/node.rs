@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use std::sync::Weak;
 
 use crate::impl_::sodium_ctx::SodiumCtx;
+use crate::impl_::sodium_ctx::SodiumCtxData;
 
 pub struct Node {
     pub data: Arc<Mutex<NodeData>>,
@@ -21,6 +22,7 @@ pub struct NodeData {
     pub visited: bool,
     pub changed: bool,
     pub update: Box<dyn FnMut()+Send>,
+    pub update_dependencies: Vec<WeakNode>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>,
     pub keep_alive: Vec<Node>,
@@ -49,7 +51,17 @@ impl Drop for Node {
         self.sodium_ctx.dec_node_ref_count();
         let ref_count = self.dec_ref_count();
         if ref_count > 0 {
-            self.sodium_ctx.add_gc_root(self);
+            // TODO: Use buffered flag here per node rather than collecting_cycles flag.
+            let collecting_cycles =
+                self.sodium_ctx.with_data(|data: &mut SodiumCtxData| data.collecting_cycles);
+            if !collecting_cycles {
+                self.sodium_ctx.add_gc_root(self);
+            }
+        } else {
+            let dependencies = self.with_data(|data: &mut NodeData| data.dependencies.clone());
+            for dependency in dependencies {
+                self.remove_dependency(&dependency);
+            }
         }
     }
 }
@@ -70,6 +82,7 @@ impl Node {
                             visited: false,
                             changed: false,
                             update: Box::new(update),
+                            update_dependencies: Vec::new(),
                             dependencies: dependencies.clone(),
                             dependents: Vec::new(),
                             keep_alive: Vec::new(),
@@ -124,6 +137,14 @@ impl Node {
             gc_data: this.gc_data.clone(),
             sodium_ctx: this.sodium_ctx.clone()
         }
+    }
+
+    pub fn add_update_dependencies(&self, update_dependencies: Vec<Node>) {
+        self.with_data(move |data: &mut NodeData| {
+            for dep in update_dependencies {
+                data.update_dependencies.push(Node::downgrade(&dep));
+            }
+        });
     }
 
     pub fn add_dependency(&self, dependency: Node) {

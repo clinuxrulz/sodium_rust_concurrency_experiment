@@ -321,9 +321,25 @@ impl SodiumCtx {
                 return;
             }
             visited.push(at_node.clone());
-            next_nodes = at_node.with_data(|data: &mut NodeData| data.dependencies.clone());
+            next_nodes = at_node.with_data(|data: &mut NodeData| {
+                let mut next_nodes = data.dependencies.clone();
+                for dep in &data.update_dependencies {
+                    if let Some(dep) = dep.upgrade() {
+                        next_nodes.push(dep);
+                    }
+                }
+                next_nodes
+            });
         } else {
-            next_nodes = node.with_data(|data: &mut NodeData| data.dependencies.clone());
+            next_nodes = node.with_data(|data: &mut NodeData| {
+                let mut next_nodes = data.dependencies.clone();
+                for dep in &data.update_dependencies {
+                    if let Some(dep) = dep.upgrade() {
+                        next_nodes.push(dep);
+                    }
+                }
+                next_nodes
+            });
         }
         for next_node in next_nodes {
             self.gc_calc_ref_count_adj(node, Some(&next_node), ref_count_adj, visited);

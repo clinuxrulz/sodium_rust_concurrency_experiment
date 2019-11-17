@@ -6,5 +6,6 @@ use crate::SodiumCtx;
 
 pub fn assert_memory_freed(sodium_ctx: &SodiumCtx) {
     let node_count = sodium_ctx.impl_.node_count();
+    println!("node_count {}", node_count);
     //assert_eq!(node_count, 0);
 }

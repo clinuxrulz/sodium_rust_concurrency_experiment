@@ -12,14 +12,27 @@ use crate::impl_::lambda::IsLambda2;
 use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::Weak;
 
 pub struct Stream<A> {
     pub data: Arc<Mutex<StreamData<A>>>
 }
 
+pub struct WeakStream<A> {
+    pub data: Weak<Mutex<StreamData<A>>>
+}
+
 impl<A> Clone for Stream<A> {
     fn clone(&self) -> Self {
         Stream {
+            data: self.data.clone()
+        }
+    }
+}
+
+impl<A> Clone for WeakStream<A> {
+    fn clone(&self) -> Self {
+        WeakStream {
             data: self.data.clone()
         }
     }
@@ -117,7 +130,7 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, mut f: FN) -> Stream<B> {
-        let _self = self.clone();
+        let _self = Stream::downgrade(self);
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
@@ -126,6 +139,11 @@ impl<A:Send+'static> Stream<A> {
                 Node::new(
                     &sodium_ctx,
                     move || {
+                        let _self_op = _self.upgrade();
+                        if _self_op.is_none() {
+                            return;
+                        }
+                        let _self = _self_op.unwrap();
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
                                 _s._send(f.call(firing));
@@ -297,11 +315,16 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn _listen<K:IsLambda1<A,()>+Send+'static>(&self, mut k: K, weak: bool) -> Listener {
-        let self_ = self.clone();
+        let self_ = Stream::downgrade(self);
         let node =
             Node::new(
                 &self.sodium_ctx(),
                 move || {
+                    let self_op = self_.upgrade();
+                    if self_op.is_none() {
+                        return;
+                    }
+                    let self_ = self_op.unwrap();
                     self_.with_data(|data: &mut StreamData<A>| {
                         for firing in &data.firing_op {
                             k.call(firing)
@@ -360,5 +383,17 @@ impl<A:Send+'static> Stream<A> {
                 });
             }
         });
+    }
+
+    pub fn downgrade(this: &Self) -> WeakStream<A> {
+        WeakStream {
+            data: Arc::downgrade(&this.data)
+        }
+    }
+}
+
+impl<A> WeakStream<A> {
+    pub fn upgrade(&self) -> Option<Stream<A>> {
+        self.data.upgrade().map(|data| Stream { data })
     }
 }

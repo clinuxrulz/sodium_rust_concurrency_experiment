@@ -54,6 +54,9 @@ impl SodiumCtx {
                 return null_node.clone();
             }
             let null_node = Node::new(self, || {}, Vec::new());
+            // Do not include null_node against total node count
+            self.dec_node_count();
+            //
             data.null_node_op = Some(null_node.clone());
             return null_node;
         })

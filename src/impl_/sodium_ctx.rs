@@ -12,7 +12,8 @@ use std::thread;
 #[derive(Clone)]
 pub struct SodiumCtx {
     data: Arc<Mutex<SodiumCtxData>>,
-    node_count: Arc<Mutex<usize>>
+    node_count: Arc<Mutex<usize>>,
+    node_ref_count: Arc<Mutex<usize>>
 }
 
 pub struct SodiumCtxData {
@@ -44,7 +45,8 @@ impl SodiumCtx {
                         gc_roots: Vec::new()
                     }
                 )),
-            node_count: Arc::new(Mutex::new(0))
+            node_count: Arc::new(Mutex::new(0)),
+            node_ref_count: Arc::new(Mutex::new(0))
         }
     }
 
@@ -131,6 +133,24 @@ impl SodiumCtx {
         let mut l = self.node_count.lock();
         let node_count: &mut usize = l.as_mut().unwrap();
         k(node_count)
+    }
+
+    pub fn node_ref_count(&self) -> usize {
+        self.with_node_ref_count(|node_ref_count: &mut usize| *node_ref_count)
+    }
+
+    pub fn inc_node_ref_count(&self) {
+        self.with_node_ref_count(|node_ref_count: &mut usize| *node_ref_count = *node_ref_count + 1);
+    }
+
+    pub fn dec_node_ref_count(&self) {
+        self.with_node_ref_count(|node_ref_count: &mut usize| *node_ref_count = *node_ref_count - 1);
+    }
+
+    pub fn with_node_ref_count<R,K:FnOnce(&mut usize)->R>(&self, k: K) -> R {
+        let mut l = self.node_ref_count.lock();
+        let node_ref_count: &mut usize = l.as_mut().unwrap();
+        k(node_ref_count)
     }
 
     pub fn end_of_transaction(&self) {

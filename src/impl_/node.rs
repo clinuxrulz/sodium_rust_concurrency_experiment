@@ -34,6 +34,7 @@ pub struct NodeGcData {
 
 impl Clone for Node {
     fn clone(&self) -> Self {
+        self.sodium_ctx.inc_node_ref_count();
         self.inc_ref_count();
         Node {
             data: self.data.clone(),
@@ -45,6 +46,7 @@ impl Clone for Node {
 
 impl Drop for Node {
     fn drop(&mut self) {
+        self.sodium_ctx.dec_node_ref_count();
         let ref_count = self.dec_ref_count();
         if ref_count > 0 {
             self.sodium_ctx.add_gc_root(self);
@@ -87,6 +89,7 @@ impl Node {
             let dependency2: &mut NodeData = l.as_mut().unwrap();
             dependency2.dependents.push(Node::downgrade(&result));
         }
+        sodium_ctx.inc_node_ref_count();
         sodium_ctx.inc_node_count();
         return result;
     }
@@ -165,6 +168,7 @@ impl WeakNode {
     pub fn upgrade(&self) -> Option<Node> {
         let node_op = self.data.upgrade().map(|data| Node { data, sodium_ctx: self.sodium_ctx.clone(), gc_data: self.gc_data.clone() });
         if let Some(ref node) = &node_op {
+            node.sodium_ctx.inc_node_ref_count();
             node.inc_ref_count();
         }
         node_op

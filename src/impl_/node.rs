@@ -23,7 +23,8 @@ pub struct NodeData {
     pub update: Box<dyn FnMut()+Send>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>,
-    pub keep_alive: Vec<Node>
+    pub keep_alive: Vec<Node>,
+    pub sodium_ctx: SodiumCtx
 }
 
 pub struct NodeGcData {
@@ -51,6 +52,12 @@ impl Drop for Node {
     }
 }
 
+impl Drop for NodeData {
+    fn drop(&mut self) {
+        self.sodium_ctx.dec_node_count();
+    }
+}
+
 impl Node {
     pub fn new<UPDATE:FnMut()+Send+'static>(sodium_ctx: &SodiumCtx, update: UPDATE, dependencies: Vec<Node>) -> Self {
         let result =
@@ -63,7 +70,8 @@ impl Node {
                             update: Box::new(update),
                             dependencies: dependencies.clone(),
                             dependents: Vec::new(),
-                            keep_alive: Vec::new()
+                            keep_alive: Vec::new(),
+                            sodium_ctx: sodium_ctx.clone()
                         }
                     )),
                 gc_data: Arc::new(Mutex::new(
@@ -79,6 +87,7 @@ impl Node {
             let dependency2: &mut NodeData = l.as_mut().unwrap();
             dependency2.dependents.push(Node::downgrade(&result));
         }
+        sodium_ctx.inc_node_count();
         return result;
     }
 

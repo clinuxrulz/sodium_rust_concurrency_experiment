@@ -11,7 +11,8 @@ use std::thread;
 
 #[derive(Clone)]
 pub struct SodiumCtx {
-    data: Arc<Mutex<SodiumCtxData>>
+    data: Arc<Mutex<SodiumCtxData>>,
+    node_count: Arc<Mutex<usize>>
 }
 
 pub struct SodiumCtxData {
@@ -42,7 +43,8 @@ impl SodiumCtx {
                         collecting_cycles: false,
                         gc_roots: Vec::new()
                     }
-                ))
+                )),
+            node_count: Arc::new(Mutex::new(0))
         }
     }
 
@@ -108,6 +110,24 @@ impl SodiumCtx {
         let mut l = self.data.lock();
         let data: &mut SodiumCtxData = l.as_mut().unwrap();
         k(data)
+    }
+
+    pub fn node_count(&self) -> usize {
+        self.with_node_count(|node_count: &mut usize| *node_count)
+    }
+
+    pub fn inc_node_count(&self) {
+        self.with_node_count(|node_count: &mut usize| *node_count = *node_count + 1);
+    }
+
+    pub fn dec_node_count(&self) {
+        self.with_node_count(|node_count: &mut usize| *node_count = *node_count - 1);
+    }
+
+    pub fn with_node_count<R,K:FnOnce(&mut usize)->R>(&self, k: K) -> R {
+        let mut l = self.node_count.lock();
+        let node_count: &mut usize = l.as_mut().unwrap();
+        k(node_count)
     }
 
     pub fn end_of_transaction(&self) {

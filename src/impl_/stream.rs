@@ -130,7 +130,7 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, mut f: FN) -> Stream<B> {
-        let _self = self.clone();
+        let _self = Stream::downgrade(self);
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
@@ -139,6 +139,11 @@ impl<A:Send+'static> Stream<A> {
                 let node = Node::new(
                     &sodium_ctx,
                     move || {
+                        let _self_op = _self.upgrade();
+                        if _self_op.is_none() {
+                            return;
+                        }
+                        let _self = _self_op.unwrap();
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
                                 _s._send(f.call(firing));

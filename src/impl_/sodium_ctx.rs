@@ -328,6 +328,9 @@ impl SodiumCtx {
                         next_nodes.push(dep);
                     }
                 }
+                //for dep in &data.keep_alive {
+                //    next_nodes.push(dep.clone());
+                //}
                 next_nodes
             });
         } else {
@@ -338,6 +341,9 @@ impl SodiumCtx {
                         next_nodes.push(dep);
                     }
                 }
+                //for dep in &data.keep_alive {
+                //    next_nodes.push(dep.clone());
+                //}
                 next_nodes
             });
         }

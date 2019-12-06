@@ -17,6 +17,7 @@ pub struct SodiumCtx {
 }
 
 pub struct SodiumCtxData {
+    pub threaded_mode: ThreadedMode,
     pub null_node_op: Option<Node>,
     pub changed_nodes: Vec<Node>,
     pub visited_nodes: Vec<Node>,
@@ -28,12 +29,54 @@ pub struct SodiumCtxData {
     pub gc_roots: Vec<WeakNode>
 }
 
+pub struct ThreadedMode {
+    pub spawner: ThreadSpawner
+}
+
+pub struct ThreadSpawner {
+    pub spawn_fn: Box<dyn FnMut(Box<dyn FnOnce()+Send>)->ThreadJoiner+Send>
+}
+
+pub struct ThreadJoiner {
+    pub join_fn: Box<dyn FnOnce()+Send>
+}
+
+pub fn single_threaded_mode() -> ThreadedMode {
+    ThreadedMode {
+        spawner: ThreadSpawner {
+            spawn_fn: Box::new(|callback| {
+                callback();
+                ThreadJoiner {
+                    join_fn: Box::new(|| {})
+                }
+            })
+        }
+    }
+}
+
+pub fn simple_threaded_mode() -> ThreadedMode {
+    ThreadedMode {
+        spawner: ThreadSpawner {
+            spawn_fn: Box::new(|callback| {
+                let h = thread::spawn(callback);
+                ThreadJoiner {
+                    join_fn: Box::new(move || { h.join().unwrap(); })
+                }
+            })
+        }
+    }
+}
+
+// TODO:
+//pub fn thread_pool_threaded_mode(num_threads: usize) -> ThreadedMode
+
 impl SodiumCtx {
     pub fn new() -> SodiumCtx {
         SodiumCtx {
             data:
                 Arc::new(Mutex::new(
                     SodiumCtxData {
+                        threaded_mode: single_threaded_mode(),
                         null_node_op: None,
                         changed_nodes: Vec::new(),
                         visited_nodes: Vec::new(),

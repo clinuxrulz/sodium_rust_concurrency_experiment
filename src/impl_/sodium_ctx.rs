@@ -13,11 +13,11 @@ use std::thread;
 pub struct SodiumCtx {
     data: Arc<Mutex<SodiumCtxData>>,
     node_count: Arc<Mutex<usize>>,
-    node_ref_count: Arc<Mutex<usize>>
+    node_ref_count: Arc<Mutex<usize>>,
+    threaded_mode: Arc<ThreadedMode>
 }
 
 pub struct SodiumCtxData {
-    pub threaded_mode: ThreadedMode,
     pub null_node_op: Option<Node>,
     pub changed_nodes: Vec<Node>,
     pub visited_nodes: Vec<Node>,
@@ -34,7 +34,7 @@ pub struct ThreadedMode {
 }
 
 pub struct ThreadSpawner {
-    pub spawn_fn: Box<dyn FnMut(Box<dyn FnOnce()+Send>)->ThreadJoiner+Send>
+    pub spawn_fn: Box<dyn FnMut(Box<dyn FnOnce()+Send>)->ThreadJoiner+Send+Sync>
 }
 
 pub struct ThreadJoiner {
@@ -76,7 +76,6 @@ impl SodiumCtx {
             data:
                 Arc::new(Mutex::new(
                     SodiumCtxData {
-                        threaded_mode: single_threaded_mode(),
                         null_node_op: None,
                         changed_nodes: Vec::new(),
                         visited_nodes: Vec::new(),
@@ -89,7 +88,8 @@ impl SodiumCtx {
                     }
                 )),
             node_count: Arc::new(Mutex::new(0)),
-            node_ref_count: Arc::new(Mutex::new(0))
+            node_ref_count: Arc::new(Mutex::new(0)),
+            threaded_mode: Arc::new(single_threaded_mode())
         }
     }
 

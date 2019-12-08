@@ -34,11 +34,43 @@ pub struct ThreadedMode {
 }
 
 pub struct ThreadSpawner {
-    pub spawn_fn: Box<dyn FnMut(Box<dyn FnOnce()+Send>)->ThreadJoiner+Send+Sync>
+    pub spawn_fn: Box<dyn FnMut(Box<dyn FnOnce()+Send>)->ThreadJoiner<()>+Send+Sync>
 }
 
-pub struct ThreadJoiner {
-    pub join_fn: Box<dyn FnOnce()+Send>
+pub struct ThreadJoiner<R> {
+    pub join_fn: Box<dyn FnOnce()->R+Send>
+}
+
+impl ThreadedMode {
+    pub fn spawn<R:Send+'static,F:FnOnce()->R+Send+'static>(&mut self, f: F) -> ThreadJoiner<R> {
+        let r: Arc<Mutex<Option<R>>> = Arc::new(Mutex::new(None));
+        let thread_joiner;
+        {
+            let r = r.clone();
+            thread_joiner = (self.spawner.spawn_fn)(Box::new(move || {
+                let r2 = f();
+                let mut l = r.lock();
+                let r: &mut Option<R> = l.as_mut().unwrap();
+                *r = Some(r2);
+            }));
+        }
+        return ThreadJoiner {
+            join_fn: Box::new(move || {
+                (thread_joiner.join_fn)();
+                let mut l = r.lock();
+                let r: &mut Option<R> = l.as_mut().unwrap();
+                let mut r2: Option<R> = None;
+                mem::swap(r, &mut r2);
+                r2.unwrap()
+            })
+        };
+    }
+}
+
+impl<R> ThreadJoiner<R> {
+    pub fn join(self) -> R {
+        (self.join_fn)()
+    }
 }
 
 pub fn single_threaded_mode() -> ThreadedMode {

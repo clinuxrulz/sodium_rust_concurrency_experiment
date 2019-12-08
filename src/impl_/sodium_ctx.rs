@@ -34,7 +34,7 @@ pub struct ThreadedMode {
 }
 
 pub struct ThreadSpawner {
-    pub spawn_fn: Box<dyn FnMut(Box<dyn FnOnce()+Send>)->ThreadJoiner<()>+Send+Sync>
+    pub spawn_fn: Box<dyn Fn(Box<dyn FnOnce()+Send>)->ThreadJoiner<()>+Send+Sync>
 }
 
 pub struct ThreadJoiner<R> {
@@ -42,7 +42,7 @@ pub struct ThreadJoiner<R> {
 }
 
 impl ThreadedMode {
-    pub fn spawn<R:Send+'static,F:FnOnce()->R+Send+'static>(&mut self, f: F) -> ThreadJoiner<R> {
+    pub fn spawn<R:Send+'static,F:FnOnce()->R+Send+'static>(&self, f: F) -> ThreadJoiner<R> {
         let r: Arc<Mutex<Option<R>>> = Arc::new(Mutex::new(None));
         let thread_joiner;
         {
@@ -295,7 +295,7 @@ impl SodiumCtx {
         {
             let dependencies = dependencies.clone();
             let _self = self.clone();
-            handle = thread::spawn(move || {
+            handle = self.threaded_mode.spawn(move || {
                 for dependency in &dependencies {
                     let visit_it = dependency.with_data(|data: &mut NodeData| !data.visited);
                     if visit_it {
@@ -304,7 +304,7 @@ impl SodiumCtx {
                 }
             });
         }
-        handle.join().unwrap();
+        handle.join();
         // any dependencies changed?
         let any_changed =
             dependencies
@@ -326,18 +326,14 @@ impl SodiumCtx {
             let dependents = node.with_data(|data: &mut NodeData| {
                 data.dependents.clone()
             });
-            let handle;
             {
                 let dependents = dependents.clone();
                 let _self = self.clone();
-                handle = thread::spawn(move || {
-                    for dependent in dependents {
-                        if let Some(dependent2) = dependent.upgrade() {
-                            _self.update_node(&dependent2);
-                        }
+                for dependent in dependents {
+                    if let Some(dependent2) = dependent.upgrade() {
+                        _self.update_node(&dependent2);
                     }
-                });
-                handle.join().unwrap();
+                }
             }
         }
     }

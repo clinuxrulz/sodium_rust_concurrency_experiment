@@ -271,7 +271,7 @@ impl SodiumCtx {
             k();
         }
         // gc
-        self.collect_cycles()
+        //self.collect_cycles()
     }
 
     pub fn update_node(&self, node: &Node) {
@@ -368,7 +368,8 @@ impl SodiumCtx {
         let mut visited: Vec<Node> = Vec::new();
         self.gc_calc_ref_count_adj(&node, None, &mut ref_count_adj, &mut visited);
         // "+ 1" for current reference in this method
-        if node.ref_count() == ref_count_adj + 1 {
+        let ref_count = Arc::strong_count(&node.data);
+        if ref_count == ref_count_adj + 1 {
             self.gc_free_node(&node);
         }
     }
@@ -399,9 +400,9 @@ impl SodiumCtx {
                         next_nodes.push(dep);
                     }
                 }
-                //for dep in &data.keep_alive {
-                //    next_nodes.push(dep.clone());
-                //}
+                for dep in &data.keep_alive {
+                    next_nodes.push(dep.clone());
+                }
                 next_nodes
             });
         } else {
@@ -412,9 +413,9 @@ impl SodiumCtx {
                         next_nodes.push(dep);
                     }
                 }
-                //for dep in &data.keep_alive {
-                //    next_nodes.push(dep.clone());
-                //}
+                for dep in &data.keep_alive {
+                    next_nodes.push(dep.clone());
+                }
                 next_nodes
             });
         }

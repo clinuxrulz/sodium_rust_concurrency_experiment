@@ -4,6 +4,7 @@ use crate::impl_::sodium_ctx::SodiumCtxData;
 
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::fmt;
 
 #[derive(Clone)]
 pub struct Listener {
@@ -58,5 +59,22 @@ impl Listener {
         let mut l = self.data.lock();
         let data: &mut ListenerData = l.as_mut().unwrap();
         k(data)
+    }
+}
+
+impl fmt::Debug for Listener {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let node_op = self.node_op();
+        write!(f, "(Listener")?;
+        match node_op {
+            Some(node) => {
+                writeln!(f, "")?;
+                writeln!(f, "{:?})", node)?;
+            }
+            None => {
+                writeln!(f, ")")?;
+            }
+        }
+        fmt::Result::Ok(())
     }
 }

@@ -1,4 +1,5 @@
 use crate::Cell;
+use crate::CellSink;
 use crate::lambda1;
 use crate::Operational;
 use crate::SodiumCtx;

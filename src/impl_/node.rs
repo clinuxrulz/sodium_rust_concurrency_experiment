@@ -1,6 +1,9 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
+use std::fmt;
+use std::collections::HashMap;
+use std::collections::HashSet;
 
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
@@ -182,6 +185,103 @@ impl Node {
         let mut l = self.data.lock();
         let data: &mut NodeData = l.as_mut().unwrap();
         k(data)
+    }
+}
+
+impl fmt::Debug for Node {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut node_to_id;
+        {
+            let mut next_id: usize = 1;
+            let mut node_id_map: HashMap<*const NodeData,usize> = HashMap::new();
+            node_to_id = move |node: &Node| {
+                let l = node.data.lock();
+                let node_data: &NodeData = l.as_ref().unwrap();
+                let node_data: *const NodeData = node_data;
+                let existing_op = node_id_map.get(&node_data).map(|x| x.clone());
+                let node_id;
+                if let Some(existing) = existing_op {
+                    node_id = existing;
+                } else {
+                    node_id = next_id;
+                    next_id = next_id + 1;
+                    node_id_map.insert(node_data, node_id);
+                }
+                return format!("N{}", node_id);
+            };
+        }
+        struct Util {
+            visited: HashSet<*const NodeData>
+        }
+        impl Util {
+            pub fn new() -> Util {
+                Util {
+                    visited: HashSet::new()
+                }
+            }
+            pub fn is_visited(&self, node: &Node) -> bool {
+                let l = node.data.lock();
+                let node_data: &NodeData = l.as_ref().unwrap();
+                let node_data: *const NodeData = node_data;
+                return self.visited.contains(&node_data);
+            }
+            pub fn mark_visitied(&mut self, node: &Node) {
+                let l = node.data.lock();
+                let node_data: &NodeData = l.as_ref().unwrap();
+                let node_data: *const NodeData = node_data;
+                self.visited.insert(node_data);
+            }
+        }
+        let mut util = Util::new();
+        let mut stack = vec![self.clone()];
+        loop {
+            let node_op = stack.pop();
+            if node_op.is_none() {
+                break;
+            }
+            let node = node_op.unwrap();
+            let node = &node;
+            if util.is_visited(node) {
+                continue;
+            }
+            util.mark_visitied(node);
+            write!(f, "(Node {} (dependencies [", node_to_id(node))?;
+            let dependencies = node.with_data(|data: &mut NodeData| data.dependencies.clone());
+            {
+                let mut first: bool = true;
+                for dependency in dependencies {
+                    if !first {
+                        write!(f, ", ")?;
+                    } else {
+                        first = false;
+                    }
+                    write!(f, "{}", node_to_id(&dependency))?;
+                    stack.push(dependency);
+                }
+            }
+            write!(f, "]) (dependents [")?;
+            let dependents: Vec<Node> =
+                node.with_data(|data: &mut NodeData|
+                    data
+                        .dependents
+                        .iter()
+                        .flat_map(|dependent| dependent.upgrade())
+                        .collect()
+                );
+            {
+                let mut first: bool = true;
+                for dependent in dependents {
+                    if !first {
+                        write!(f, ", ")?;
+                    } else {
+                        first = false;
+                    }
+                    write!(f, "{}", node_to_id(&dependent))?;
+                }
+            }
+            writeln!(f, "])")?;
+        }
+        return fmt::Result::Ok(());
     }
 }
 

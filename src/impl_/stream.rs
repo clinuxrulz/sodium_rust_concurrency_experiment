@@ -47,15 +47,25 @@ pub struct StreamData<A> {
 
 impl<A:Send+'static> Stream<A> {
     pub fn new(sodium_ctx: &SodiumCtx) -> Stream<A> {
-        Stream {
-            data: Arc::new(Mutex::new(StreamData {
-                firing_op: None,
-                node: sodium_ctx.null_node(),
-                sodium_ctx: sodium_ctx.clone(),
-                coalescer_op: None
-            })),
-        }
+        Stream::_new(
+            sodium_ctx,
+            |s: &Stream<A>| {
+                let s = s.clone();
+                let node = Node::new(
+                    sodium_ctx,
+                    move || {
+                        s.nop();
+                    },
+                    Vec::new()
+                );
+                node.add_update_dependencies(vec![node.clone()]);
+                node
+            }
+        )
     }
+
+    // for purpose of capturing stream in lambda
+    pub fn nop(&self) {}
 
     pub fn _new_with_coalescer<COALESCER:FnMut(&A,&A)->A+Send+'static>(sodium_ctx: &SodiumCtx, coalescer: COALESCER) -> Stream<A> {
         Stream {
@@ -130,7 +140,7 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, mut f: FN) -> Stream<B> {
-        let _self = Stream::downgrade(self);
+        let self_ = Stream::downgrade(self);
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
@@ -139,12 +149,10 @@ impl<A:Send+'static> Stream<A> {
                 let node = Node::new(
                     &sodium_ctx,
                     move || {
-                        let _self_op = _self.upgrade();
-                        if _self_op.is_none() {
-                            return;
-                        }
-                        let _self = _self_op.unwrap();
-                        _self.with_firing_op(|firing_op: &mut Option<A>| {
+                        let self_op = self_.upgrade();
+                        assert!(self_op.is_some());
+                        let self_ = self_op.unwrap();
+                        self_.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
                                 _s._send(f.call(firing));
                             }
@@ -152,7 +160,7 @@ impl<A:Send+'static> Stream<A> {
                     },
                     vec![self.node()]
                 );
-                //node.add_update_dependencies(vec![node.clone()]);
+                node.add_update_dependencies(vec![node.clone()]);
                 node
             }
         )
@@ -194,9 +202,16 @@ impl<A:Send+'static> Stream<A> {
             |s: &Stream<A>| {
                 let _s = s.clone();
                 let _s2 = s2.clone();
-                Node::new(
+                let _self = Stream::downgrade(&_self);
+                let _s2 = Stream::downgrade(&_s2);
+                let node = Node::new(
                     &sodium_ctx,
                     move || {
+                        let _self_op = _self.upgrade();
+                        let _s2_op = _s2.upgrade();
+                        assert!(_self_op.is_some() && _s2_op.is_some());
+                        let _self = _self_op.unwrap();
+                        let _s2 = _s2_op.unwrap();
                         _self.with_firing_op(|firing1_op: &mut Option<A>| {
                             _s2.with_firing_op(|firing2_op: &mut Option<A>| {
                                 if let Some(ref firing1) = firing1_op {
@@ -214,7 +229,9 @@ impl<A:Send+'static> Stream<A> {
                         })
                     },
                     vec![self.node(), s2.node()]
-                )
+                );
+                node.add_update_dependencies(vec![node.clone()]);
+                node
             }
         )
     }
@@ -323,9 +340,7 @@ impl<A:Send+'static> Stream<A> {
                 &self.sodium_ctx(),
                 move || {
                     let self_op = self_.upgrade();
-                    if self_op.is_none() {
-                        return;
-                    }
+                    assert!(self_op.is_some());
                     let self_ = self_op.unwrap();
                     self_.with_data(|data: &mut StreamData<A>| {
                         for firing in &data.firing_op {

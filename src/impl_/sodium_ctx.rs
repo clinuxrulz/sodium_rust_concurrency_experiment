@@ -445,6 +445,7 @@ impl SodiumCtx {
         let dependencies =
             node.with_data(|data: &mut NodeData| {
                 data.update = Box::new(|| {});
+                data.keep_alive.clear();
                 data.dependencies.clone()
             });
         for dependency in dependencies {

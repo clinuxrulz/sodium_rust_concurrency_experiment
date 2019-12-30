@@ -31,6 +31,7 @@ fn loop_value_snapshot() {
                 }
             );
         }
+        println!("{:?}", l.impl_);
         l.unlisten();
         {
             let l = out.lock();

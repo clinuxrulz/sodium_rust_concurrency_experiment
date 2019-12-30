@@ -26,6 +26,7 @@ pub struct SodiumCtxData {
     pub post: Vec<Box<dyn FnMut()+Send>>,
     pub keep_alive: Vec<Listener>,
     pub collecting_cycles: bool,
+    pub allow_add_roots: bool,
     pub gc_roots: Vec<WeakNode>
 }
 
@@ -116,6 +117,7 @@ impl SodiumCtx {
                         post: Vec::new(),
                         keep_alive: Vec::new(),
                         collecting_cycles: false,
+                        allow_add_roots: true,
                         gc_roots: Vec::new()
                     }
                 )),
@@ -345,22 +347,31 @@ impl SodiumCtx {
                     return true;
                 }
                 data.collecting_cycles = true;
+                data.allow_add_roots = false;
                 return false;
             });
         if bail {
             return;
         }
-        let mut gc_roots: Vec<WeakNode> = Vec::new();
-        self.with_data(|data: &mut SodiumCtxData| {
-            mem::swap(&mut gc_roots, &mut data.gc_roots);
-        });
-        for gc_root in gc_roots {
-            let gc_root_op = gc_root.upgrade();
-            if let Some(gc_root) = gc_root_op {
-                self.gc_process_root(gc_root);
+        loop {
+            let mut gc_roots: Vec<WeakNode> = Vec::new();
+            self.with_data(|data: &mut SodiumCtxData| {
+                mem::swap(&mut gc_roots, &mut data.gc_roots);
+            });
+            if gc_roots.is_empty() {
+                break;
+            }
+            for gc_root in gc_roots {
+                let gc_root_op = gc_root.upgrade();
+                if let Some(gc_root) = gc_root_op {
+                    self.gc_process_root(gc_root);
+                }
             }
         }
-        self.with_data(|data: &mut SodiumCtxData| data.collecting_cycles = false);
+        self.with_data(|data: &mut SodiumCtxData| {
+            data.collecting_cycles = false;
+            data.allow_add_roots = true;
+        });
     }
 
     pub fn gc_process_root(&self, node: Node) {
@@ -370,7 +381,13 @@ impl SodiumCtx {
         // "+ 1" for current reference in this method
         let ref_count = Arc::strong_count(&node.data);
         if ref_count == ref_count_adj + 1 {
+            self.with_data(|data: &mut SodiumCtxData| {
+                data.allow_add_roots = true;
+            });
             self.gc_free_node(&node);
+            self.with_data(|data: &mut SodiumCtxData| {
+                data.allow_add_roots = false;
+            });
         }
     }
 

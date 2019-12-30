@@ -1,10 +1,16 @@
 use crate::impl_::node::NodeData;
 use crate::impl_::stream::Stream;
+use crate::impl_::stream::WeakStream;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
 
 pub struct StreamSink<A> {
     stream: Stream<A>,
+    sodium_ctx: SodiumCtx
+}
+
+pub struct WeakStreamSink<A> {
+    stream: WeakStream<A>,
     sodium_ctx: SodiumCtx
 }
 
@@ -47,5 +53,19 @@ impl<A:Send+'static> StreamSink<A> {
             });
             self.stream._send(a);
         });
+    }
+
+    pub fn downgrade(this: &Self) -> WeakStreamSink<A> {
+        WeakStreamSink {
+            stream: Stream::downgrade(&this.stream),
+            sodium_ctx: this.sodium_ctx.clone()
+        }
+    }
+}
+
+impl<A> WeakStreamSink<A> {
+    pub fn upgrade(&self) -> Option<StreamSink<A>> {
+        let sodium_ctx = self.sodium_ctx.clone();
+        self.stream.upgrade().map(|stream: Stream<A>| StreamSink { stream, sodium_ctx })
     }
 }

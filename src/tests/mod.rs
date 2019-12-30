@@ -12,5 +12,5 @@ pub fn assert_memory_freed(sodium_ctx: &SodiumCtx) {
     println!();
     println!("node_count {}", node_count);
     println!("node_ref_count {}", node_ref_count);
-    //assert_eq!(node_count, 0);
+    assert_eq!(node_count, 0);
 }

@@ -55,9 +55,8 @@ impl Drop for Node {
         let ref_count = self.dec_ref_count();
         if ref_count > 0 {
             // TODO: Use buffered flag here per node rather than collecting_cycles flag.
-            let collecting_cycles =
-                self.sodium_ctx.with_data(|data: &mut SodiumCtxData| data.collecting_cycles);
-            if !collecting_cycles {
+            let allow_add_roots = self.sodium_ctx.with_data(|data: &mut SodiumCtxData| data.allow_add_roots);
+            if allow_add_roots {
                 self.sodium_ctx.add_gc_root(self);
             }
         } else {

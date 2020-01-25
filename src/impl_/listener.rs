@@ -2,13 +2,19 @@ use crate::impl_::node::Node;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
 
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::cell::RefCell;
 use std::fmt;
+use bacon_rajan_cc::{Cc, Trace, Tracer};
 
 #[derive(Clone)]
 pub struct Listener {
-    pub data: Arc<Mutex<ListenerData>>
+    pub data: Cc<RefCell<ListenerData>>
+}
+
+impl Trace for Listener {
+    fn trace(&self, tracer: &mut Tracer) {
+        tracer(&self.data);
+    }
 }
 
 pub struct ListenerData {
@@ -17,10 +23,18 @@ pub struct ListenerData {
     pub node_op: Option<Node>
 }
 
+impl Trace for ListenerData {
+    fn trace(&self, tracer: &mut Tracer) {
+        if let Some(ref node) = self.node_op {
+            node.trace(tracer);
+        }
+    }
+}
+
 impl Listener {
     pub fn new(sodium_ctx: &SodiumCtx, is_weak: bool, node: Node) -> Listener {
         let listener = Listener {
-            data: Arc::new(Mutex::new(ListenerData {
+            data: Cc::new(RefCell::new(ListenerData {
                 sodium_ctx: sodium_ctx.clone(),
                 node_op: Some(node),
                 is_weak
@@ -38,15 +52,16 @@ impl Listener {
         let is_weak;
         let sodium_ctx;
         {
-            let mut l = self.data.lock();
-            let data: &mut ListenerData = l.as_mut().unwrap();
+            let mut l = self.data.borrow_mut();
+            let data: &mut ListenerData = &mut l;
             data.node_op = None;
             is_weak = data.is_weak;
             sodium_ctx = data.sodium_ctx.clone();
         }
         if !is_weak {
             sodium_ctx.with_data(|data: &mut SodiumCtxData| {
-                data.keep_alive.retain(|l:&Listener| !Arc::ptr_eq(&l.data,&self.data))
+                let ptr_str = format!("{:p}", self.data);
+                data.keep_alive.retain(|l:&Listener| format!("{:p}",l.data) != ptr_str);
             });
         }
     }
@@ -56,8 +71,8 @@ impl Listener {
     }
 
     pub fn with_data<R,K:FnOnce(&mut ListenerData)->R>(&self, k: K) -> R {
-        let mut l = self.data.lock();
-        let data: &mut ListenerData = l.as_mut().unwrap();
+        let mut l = self.data.borrow_mut();
+        let data: &mut ListenerData = &mut l;
         k(data)
     }
 }

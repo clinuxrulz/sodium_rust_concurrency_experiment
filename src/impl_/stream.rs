@@ -321,7 +321,7 @@ impl<A:'static> Stream<A> {
                 let a = a.clone();
                 sodium_ctx.post(move || ss.send(a.clone()))
             });
-            s.node().add_keep_alive(&listener.node_op().unwrap());
+            s.node().add_keep_alive(Dep::new(listener));
             return s;
         })
     }
@@ -331,16 +331,17 @@ impl<A:'static> Stream<A> {
         Stream::_new(
             &sodium_ctx,
             |s: &Stream<A>| {
-                let s_ = s.clone();
+                let s_ = Stream::downgrade(s);
                 let sodium_ctx = sodium_ctx.clone();
                 let sodium_ctx2 = sodium_ctx.clone();
-                let _self = Stream::downgrade(self);
+                let self_ = Stream::downgrade(self);
                 let node = Node::new(
                     &sodium_ctx2,
                     move || {
-                        let _self = _self.upgrade().unwrap();
-                        _self.with_firing_op(|firing_op: &mut Option<A>| {
+                        let self_ = self_.upgrade().unwrap();
+                        self_.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
+                                let s_ = s_.upgrade().unwrap();
                                 s_._send(firing.clone());
                                 let node = s_.node();
                                 sodium_ctx.post(move || {
@@ -357,7 +358,7 @@ impl<A:'static> Stream<A> {
                     },
                     vec![self.node()]
                 );
-                node.add_update_dependencies(vec![node.clone()]);
+                node.add_keep_alive(Dep::new(s.clone()));
                 node
             }
         )

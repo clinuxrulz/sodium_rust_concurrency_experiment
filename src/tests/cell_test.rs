@@ -87,12 +87,12 @@ fn map_c() {
             let tmp1 = c.cell();
             //sodium_ctx.impl_.collect_cycles();
             let tmp2 = tmp1.map(|a: &i32| format!("{}", a));
+            //println!("{:?}", tmp2.node());
             sodium_ctx.impl_.collect_cycles();
             l = tmp2.listen(
               move |a: &String|
                   out.lock().as_mut().unwrap().push(a.clone())
             );
-            println!("{:?}", l.impl_.node_op().unwrap());
             //sodium_ctx.impl_.collect_cycles();
         }
         c.send(8);

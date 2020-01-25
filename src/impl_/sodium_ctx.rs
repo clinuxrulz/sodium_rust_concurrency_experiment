@@ -377,12 +377,11 @@ impl SodiumCtx {
             return;
         }
         let node = node_op.unwrap();
-        let mut ref_count_adj: usize = 0;
-        let mut visited: Vec<Node> = Vec::new();
-        self.gc_calc_ref_count_adj(&node, None, &mut ref_count_adj, &mut visited);
+        let ref_count_adj = self.gc_calc_ref_count_adj(&node);
         // "+ 1" for current reference in this method
         let ref_count = Arc::strong_count(&node.data);
         if ref_count == ref_count_adj + 1 {
+            // println!("ref_count {}, ref_count_adj {}\n{:?}", ref_count, ref_count_adj, node);
             self.with_data(|data: &mut SodiumCtxData| {
                 data.allow_add_roots = true;
             });
@@ -393,54 +392,61 @@ impl SodiumCtx {
         }
     }
 
-    pub fn gc_calc_ref_count_adj(&self, node: &Node, at_node_op: Option<&Node>, ref_count_adj: &mut usize, visited: &mut Vec<Node>) {
+    pub fn gc_calc_ref_count_adj(&self, node: &Node) -> usize {
+        let next_nodes = node.with_data(|data: &mut NodeData| {
+            let mut next_nodes = data.dependencies.clone();
+            for dep in &data.update_dependencies {
+                if let Some(dep) = dep.upgrade() {
+                    next_nodes.push(dep);
+                }
+            }
+            for dep in &data.keep_alive {
+                next_nodes.push(dep.clone());
+            }
+            next_nodes
+        });
+        let mut ref_count_adj = 0;
+        for at_node in next_nodes {
+            self.gc_calc_ref_count_adj2(node, &at_node, &mut ref_count_adj);
+        }
+        ref_count_adj
+    }
+
+    pub fn gc_calc_ref_count_adj2(&self, node: &Node, at_node: &Node, ref_count_adj: &mut usize) {
+        if Arc::ptr_eq(&node.data, &at_node.data) {
+            *ref_count_adj = *ref_count_adj + 1;
+            return;
+        }
         let next_nodes: Vec<Node>;
-        if let Some(at_node) = at_node_op {
-            if Arc::ptr_eq(&node.data, &at_node.data) {
-                *ref_count_adj = *ref_count_adj + 1;
-                return;
-            }
-            let bail =
-                at_node.with_gc_data(|data: &mut NodeGcData| {
-                    if data.visited {
-                        return true;
-                    }
-                    data.visited = true;
-                    return false;
-                });
-            if bail {
-                return;
-            }
-            visited.push(at_node.clone());
-            next_nodes = at_node.with_data(|data: &mut NodeData| {
-                let mut next_nodes = data.dependencies.clone();
-                for dep in &data.update_dependencies {
-                    if let Some(dep) = dep.upgrade() {
-                        next_nodes.push(dep);
-                    }
+        let bail =
+            at_node.with_data(|data: &mut NodeData| {
+                if data.visited {
+                    return true;
                 }
-                for dep in &data.keep_alive {
-                    next_nodes.push(dep.clone());
-                }
-                next_nodes
+                data.visited = true;
+                return false;
             });
-        } else {
-            next_nodes = node.with_data(|data: &mut NodeData| {
-                let mut next_nodes = data.dependencies.clone();
-                for dep in &data.update_dependencies {
-                    if let Some(dep) = dep.upgrade() {
-                        next_nodes.push(dep);
-                    }
-                }
-                for dep in &data.keep_alive {
-                    next_nodes.push(dep.clone());
-                }
-                next_nodes
-            });
+        if bail {
+            return;
         }
+        next_nodes = at_node.with_data(|data: &mut NodeData| {
+            let mut next_nodes = data.dependencies.clone();
+            for dep in &data.update_dependencies {
+                if let Some(dep) = dep.upgrade() {
+                    next_nodes.push(dep);
+                }
+            }
+            for dep in &data.keep_alive {
+                next_nodes.push(dep.clone());
+            }
+            next_nodes
+        });
         for next_node in next_nodes {
-            self.gc_calc_ref_count_adj(node, Some(&next_node), ref_count_adj, visited);
+            self.gc_calc_ref_count_adj2(node, &next_node, ref_count_adj);
         }
+        at_node.with_data(|data: &mut NodeData| {
+            data.visited = false;
+        });
     }
 
     pub fn gc_free_node(&self, node: &Node) {

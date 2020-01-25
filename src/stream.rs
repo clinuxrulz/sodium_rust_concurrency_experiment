@@ -6,6 +6,7 @@ use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 use crate::impl_::lambda::IsLambda3;
 use crate::impl_::lambda::lambda2;
+use crate::impl_::lambda::lambda3_deps;
 use crate::Lazy;
 use crate::listener::Listener;
 use crate::sodium_ctx::SodiumCtx;
@@ -35,9 +36,13 @@ impl<A:Clone+'static> Stream<A> {
         }
     }
 
+    pub fn node(&self) -> Node {
+        self.impl_.node()
+    }
+
     // use as dependency to lambda1, lambda2, etc.
     pub fn to_dep(&self) -> Dep {
-        Dep::new(self.impl_)
+        Dep::new(self.impl_.clone())
     }
 
     pub fn snapshot<B:Clone+'static,C:Clone+'static,FN:IsLambda2<A,B,C>+'static>(&self, cb: &Cell<B>, f: FN) -> Stream<C> {
@@ -49,12 +54,7 @@ impl<A:Clone+'static> Stream<A> {
     }
 
     pub fn snapshot3<B:Clone+'static,C:Clone+'static,D:Clone+'static,FN:IsLambda3<A,B,C,D>+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, mut f: FN) -> Stream<D> {
-        let deps: Vec<Node>;
-        if let Some(deps2) = f.deps_op() {
-            deps = deps2.clone();
-        } else {
-            deps = Vec::new();
-        }
+        let deps: Vec<Dep> = lambda3_deps(&f);
         let cc = cc.clone();
         self.snapshot(cb, lambda2(move |a: &A, b: &B| f.call(a, b, &cc.sample()), deps))
     }

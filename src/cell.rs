@@ -39,8 +39,9 @@ impl<A:Clone+'static> Cell<A> {
         self.impl_.updates().node()
     }
 
+    // use as dependency to lambda1, lambda2, etc.
     pub fn to_dep(&self) -> Dep {
-        Dep::new(self.impl_)
+        Dep::new(self.impl_.clone())
     }
 
     pub fn updates(&self) -> Stream<A> {

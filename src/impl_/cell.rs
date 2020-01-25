@@ -90,25 +90,25 @@ impl<A:'static> Cell<A> {
         let sodium_ctx = sodium_ctx.clone();
         let node: Node;
         {
-            let c = c.clone();
+            let c_ = Cell::downgrade(&c);
             let stream2 = Stream::downgrade(&stream2);
             let sodium_ctx2 = sodium_ctx.clone();
             node = Node::new(
                 &sodium_ctx2,
                 move || {
+                    let c_ = c_.upgrade().unwrap();
                     let stream2 = stream2.upgrade().unwrap();
                     let firing_op = stream2.with_firing_op(|firing_op| firing_op.clone());
                     if let Some(firing) = firing_op {
                         let is_first =
-                            c.with_data(|data: &mut CellData<A>| {
+                            c_.with_data(|data: &mut CellData<A>| {
                                 let is_first = data.next_value_op.is_none();
                                 data.next_value_op = Some(firing);
                                 is_first
                             });
                         if is_first {
-                            let c = c.clone();
                             sodium_ctx.post(move || {
-                                c.with_data(|data: &mut CellData<A>| {
+                                c_.with_data(|data: &mut CellData<A>| {
                                     let mut next_value_op: Option<A> = None;
                                     mem::swap(&mut next_value_op, &mut data.next_value_op);
                                     if let Some(next_value) = next_value_op {
@@ -325,7 +325,8 @@ impl<A:'static> Cell<A> {
                     node1 = Node::new(
                         &sodium_ctx,
                         move || {
-                            let l = inner_s.upgrade().unwrap().borrow();
+                            let inner_s = inner_s.upgrade().unwrap();
+                            let l = inner_s.borrow();
                             let inner_s: &Stream<A> = &l;
                             inner_s.with_firing_op(|firing_op: &mut Option<A>| {
                                 if let Some(ref firing) = firing_op {
@@ -337,7 +338,7 @@ impl<A:'static> Cell<A> {
                         vec![csa.sample().node()]
                     );
                 }
-                node1.add_keep_alive(Dep::new(inner_s));
+                node1.add_keep_alive(Dep::new(inner_s.clone()));
                 node1.add_keep_alive(Dep::new(sa));
                 let node2: Node;
                 {
@@ -364,9 +365,10 @@ impl<A:'static> Cell<A> {
                                             node1.remove_dependency(&dep);
                                         }
                                         node1.add_dependency(firing.node());
-                                        let mut l = inner_s.upgrade().unwrap().borrow_mut();
+                                        let inner_s = inner_s.upgrade().unwrap();
+                                        let mut l = inner_s.borrow_mut();
                                         let inner_s: &mut Stream<A> = &mut l;
-                                        *inner_s = firing;
+                                        *inner_s = firing.clone();
                                     });
                                 }
                             });
@@ -374,7 +376,7 @@ impl<A:'static> Cell<A> {
                         vec![csa2.updates().node()]
                     );
                 }
-                node2.add_keep_alive(Dep::new(node1));
+                node2.add_keep_alive(Dep::new(node1.clone()));
                 node2.add_keep_alive(Dep::new(inner_s));
                 node1.add_keep_alive(Dep::new(node2));
                 return node1;
@@ -395,7 +397,7 @@ impl<A:'static> Cell<A> {
                     vec![cca.updates().node()]
                 );
                 let init_inner_s = cca.sample().updates();
-                let last_inner_s = Cc::new(RefCell::new(init_inner_s));
+                let last_inner_s = Cc::new(RefCell::new(init_inner_s.clone()));
                 let node2 = Node::new(
                     &sodium_ctx,
                     || {},

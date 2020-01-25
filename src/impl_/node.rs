@@ -146,6 +146,14 @@ impl Node {
         });
     }
 
+    pub fn add_keep_alives(&self, deps: Vec<Dep>) {
+        self.with_data(|data: &mut NodeData| {
+            for dep in deps {
+                data.keep_alive.push(dep);
+            }
+        });
+    }
+
     pub fn with_data<R,K:FnOnce(&mut NodeData)->R>(&self, k: K) -> R {
         let mut l: RefMut<NodeData> = self.data.borrow_mut();
         let data: &mut NodeData = &mut l;

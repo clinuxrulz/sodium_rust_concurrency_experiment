@@ -66,7 +66,7 @@ impl<A:'static> Stream<A> {
                 let s = s.clone();
                 let node = Node::new(
                     sodium_ctx,
-                    move || {},
+                    || {},
                     Vec::new()
                 );
                 node.add_keep_alive(Dep::new(s));
@@ -86,12 +86,10 @@ impl<A:'static> Stream<A> {
                 let s = s.clone();
                 let node = Node::new(
                     sodium_ctx,
-                    move || {
-                        s.nop();
-                    },
+                    || {},
                     Vec::new()
                 );
-                node.add_keep_alive(s.clone());
+                node.add_keep_alive(Dep::new(s));
                 node
             }
         )
@@ -153,7 +151,7 @@ impl<A:'static> Stream<A> {
         let cb = cb.clone();
         let cb_node = cb.node();
         let mut f_deps = lambda2_deps(&f);
-        f_deps.push(cb_node);
+        f_deps.push(Dep::new(cb_node));
         self.map(lambda1(move |a: &A| f.call(a, &cb.sample()), f_deps))
     }
 
@@ -167,7 +165,7 @@ impl<A:'static> Stream<A> {
         Stream::_new(
             &sodium_ctx,
             |s: &Stream<B>| {
-                let _s = s.clone();
+                let s_ = Stream::downgrade(s);
                 let f_deps = lambda1_deps(&f);
                 let node = Node::new(
                     &sodium_ctx,
@@ -177,14 +175,14 @@ impl<A:'static> Stream<A> {
                         let self_ = self_op.unwrap();
                         self_.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
-                                _s._send(f.call(firing));
+                                s_.upgrade().unwrap()._send(f.call(firing));
                             }
                         })
                     },
                     vec![self.node()]
                 );
-                node.add_update_dependencies(f_deps);
-                node.add_update_dependencies(vec![node.clone()]);
+                node.add_keep_alives(f_deps);
+                node.add_keep_alive(Dep::new(s.clone()));
                 node
             }
         )
@@ -196,7 +194,7 @@ impl<A:'static> Stream<A> {
         Stream::_new(
             &sodium_ctx,
             |s: &Stream<A>| {
-                let _s = s.clone();
+                let s_ = Stream::downgrade(s);
                 let pred_deps = lambda1_deps(&pred);
                 let node = Node::new(
                     &sodium_ctx,
@@ -205,14 +203,14 @@ impl<A:'static> Stream<A> {
                         self_.with_firing_op(|firing_op: &mut Option<A>| {
                             let firing_op2 = firing_op.clone().filter(|firing| pred.call(firing));
                             if let Some(firing) = firing_op2 {
-                                _s._send(firing);
+                                s_.upgrade().unwrap()._send(firing);
                             }
                         });
                     },
                     vec![self.node()]
                 );
-                node.add_update_dependencies(pred_deps);
-                node.add_update_dependencies(vec![node.clone()]);
+                node.add_keep_alives(pred_deps);
+                node.add_keep_alive(Dep::new(s.clone()));
                 node
             }
         )
@@ -229,30 +227,27 @@ impl<A:'static> Stream<A> {
         Stream::_new(
             &sodium_ctx,
             |s: &Stream<A>| {
-                let _s = s.clone();
-                let _s2 = s2.clone();
-                let _self = Stream::downgrade(&_self);
-                let _s2 = Stream::downgrade(&_s2);
+                let s_ = Stream::downgrade(s);
+                let s2_ = Stream::downgrade(&s2);
+                let self_ = Stream::downgrade(&self);
                 let f_deps = lambda2_deps(&f);
                 let node = Node::new(
                     &sodium_ctx,
                     move || {
-                        let _self_op = _self.upgrade();
-                        let _s2_op = _s2.upgrade();
-                        assert!(_self_op.is_some() && _s2_op.is_some());
-                        let _self = _self_op.unwrap();
-                        let _s2 = _s2_op.unwrap();
-                        _self.with_firing_op(|firing1_op: &mut Option<A>| {
-                            _s2.with_firing_op(|firing2_op: &mut Option<A>| {
+                        let self_ = self_.upgrade().unwrap();
+                        let s2_ = s2_.upgrade().unwrap();
+                        let s_ = s_.upgrade().unwrap();
+                        self_.with_firing_op(|firing1_op: &mut Option<A>| {
+                            s2_.with_firing_op(|firing2_op: &mut Option<A>| {
                                 if let Some(ref firing1) = firing1_op {
                                     if let Some(ref firing2) = firing2_op {
-                                        _s._send(f.call(firing1, firing2));
+                                        s_._send(f.call(firing1, firing2));
                                     } else {
-                                        _s._send(firing1.clone());
+                                        s_._send(firing1.clone());
                                     }
                                 } else {
                                     if let Some(ref firing2) = firing2_op {
-                                        _s._send(firing2.clone());
+                                        s_._send(firing2.clone());
                                     }
                                 }
                             })
@@ -260,8 +255,8 @@ impl<A:'static> Stream<A> {
                     },
                     vec![self.node(), s2.node()]
                 );
-                node.add_update_dependencies(f_deps);
-                node.add_update_dependencies(vec![node.clone()]);
+                node.add_keep_alives(f_deps);
+                node.add_keep_alive(Dep::new(s.clone()));
                 node
             }
         )

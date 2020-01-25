@@ -1,23 +1,25 @@
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::Weak;
-use std::fmt;
+use crate::impl_::sodium_ctx::SodiumCtx;
+
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::collections::HashSet;
-
-use crate::impl_::sodium_ctx::SodiumCtx;
-use crate::impl_::sodium_ctx::SodiumCtxData;
+use std::fmt;
+use bacon_rajan_cc::{Cc, Trace, Tracer, Weak};
 
 pub struct Node {
-    pub data: Arc<Mutex<NodeData>>,
-    pub gc_data: Arc<Mutex<NodeGcData>>,
+    pub data: Cc<RefCell<NodeData>>,
     pub sodium_ctx: SodiumCtx
+}
+
+impl Trace for Node {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        tracer(&mut self.data);
+    }
 }
 
 #[derive(Clone)]
 pub struct WeakNode {
-    pub data: Weak<Mutex<NodeData>>,
-    pub gc_data: Arc<Mutex<NodeGcData>>,
+    pub data: Weak<RefCell<NodeData>>,
     pub sodium_ctx: SodiumCtx
 }
 
@@ -32,19 +34,23 @@ pub struct NodeData {
     pub sodium_ctx: SodiumCtx
 }
 
-pub struct NodeGcData {
-    pub ref_count: usize,
-    pub visited: bool
+impl Trace for NodeData {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        for node in &mut self.dependencies {
+            node.trace(tracer);
+        }
+        for node in &mut self.keep_alive {
+            node.trace(tracer);
+        }
+    }
 }
 
 impl Clone for Node {
     fn clone(&self) -> Self {
         self.sodium_ctx.inc_node_ref_count();
-        self.inc_ref_count();
         Node {
             data: self.data.clone(),
             sodium_ctx: self.sodium_ctx.clone(),
-            gc_data: self.gc_data.clone()
         }
     }
 }
@@ -52,25 +58,16 @@ impl Clone for Node {
 impl Drop for Node {
     fn drop(&mut self) {
         self.sodium_ctx.dec_node_ref_count();
-        let ref_count = self.dec_ref_count();
-        if ref_count > 0 {
-            // TODO: Use buffered flag here per node rather than collecting_cycles flag.
-            let allow_add_roots = self.sodium_ctx.with_data(|data: &mut SodiumCtxData| data.allow_add_roots);
-            if allow_add_roots {
-                self.sodium_ctx.add_gc_root(self);
-            }
-        } else {
-            let dependencies = self.with_data(|data: &mut NodeData| data.dependencies.clone());
-            for dependency in dependencies {
-                self.remove_dependency(&dependency);
-            }
-        }
     }
 }
 
 impl Drop for NodeData {
     fn drop(&mut self) {
         self.sodium_ctx.dec_node_count();
+        for dependency in self.dependencies {
+            let dep: RefMut<NodeData> = dependency.data.borrow_mut();
+            dep.dependents.retain(|node: &WeakNode| node.data.upgrade().is_some());
+        }
     }
 }
 
@@ -79,7 +76,7 @@ impl Node {
         let result =
             Node {
                 data:
-                    Arc::new(Mutex::new(
+                    Cc::new(RefCell::new(
                         NodeData {
                             visited: false,
                             changed: false,
@@ -91,17 +88,10 @@ impl Node {
                             sodium_ctx: sodium_ctx.clone()
                         }
                     )),
-                gc_data: Arc::new(Mutex::new(
-                    NodeGcData {
-                        ref_count: 1,
-                        visited: false
-                    }
-                )),
                 sodium_ctx: sodium_ctx.clone()
             };
         for dependency in dependencies {
-            let mut l = dependency.data.lock();
-            let dependency2: &mut NodeData = l.as_mut().unwrap();
+            let dependency2: RefMut<NodeData> = dependency.data.borrow_mut();
             dependency2.dependents.push(Node::downgrade(&result));
         }
         sodium_ctx.inc_node_ref_count();
@@ -109,34 +99,9 @@ impl Node {
         return result;
     }
 
-    pub fn with_gc_data<R,K:FnOnce(&mut NodeGcData)->R>(&self, k: K) -> R {
-        let mut l = self.gc_data.lock();
-        let gc_data: &mut NodeGcData = l.as_mut().unwrap();
-        k(gc_data)
-    }
-
-    pub fn ref_count(&self) -> usize {
-        self.with_gc_data(|data: &mut NodeGcData| data.ref_count)
-    }
-
-    pub fn inc_ref_count(&self) -> usize {
-        self.with_gc_data(|data: &mut NodeGcData| {
-            data.ref_count = data.ref_count + 1;
-            data.ref_count
-        })
-    }
-
-    pub fn dec_ref_count(&self) -> usize {
-        self.with_gc_data(|data: &mut NodeGcData| {
-            data.ref_count = data.ref_count - 1;
-            data.ref_count
-        })
-    }
-
     pub fn downgrade(this: &Self) -> WeakNode {
         WeakNode {
-            data: Arc::downgrade(&this.data),
-            gc_data: this.gc_data.clone(),
+            data: Cc::downgrade(&this.data),
             sodium_ctx: this.sodium_ctx.clone()
         }
     }
@@ -161,8 +126,9 @@ impl Node {
 
     pub fn remove_dependency(&self, dependency: &Node) {
         self.with_data(|data: &mut NodeData| {
+            let mem_loc_str = format!("{:p}", dependency.data);
             for i in 0..data.dependencies.len() {
-                let match_ = Arc::ptr_eq(&data.dependencies[i].data, &dependency.data);
+                let match_ = format!("{:p}", data.dependencies[i].data) == mem_loc_str;
                 if match_ {
                     data.dependencies.remove(i);
                     break;
@@ -170,10 +136,11 @@ impl Node {
             }
         });
         dependency.with_data(|data: &mut NodeData| {
+            let mem_loc_str = format!("{:p}", self.data);
             for i in 0..data.dependents.len() {
                 let n_op = data.dependents[i].upgrade();
                 if let Some(n) = n_op {
-                    if Arc::ptr_eq(&n.data, &self.data) {
+                    if format!("{:p}", n.data) == mem_loc_str {
                         data.dependents.remove(i);
                         break;
                     }
@@ -189,8 +156,8 @@ impl Node {
     }
 
     pub fn with_data<R,K:FnOnce(&mut NodeData)->R>(&self, k: K) -> R {
-        let mut l = self.data.lock();
-        let data: &mut NodeData = l.as_mut().unwrap();
+        let l: RefMut<NodeData> = self.data.borrow_mut();
+        let data: &mut NodeData = &mut l;
         k(data)
     }
 }
@@ -202,8 +169,8 @@ impl fmt::Debug for Node {
             let mut next_id: usize = 1;
             let mut node_id_map: HashMap<*const NodeData,usize> = HashMap::new();
             node_to_id = move |node: &Node| {
-                let l = node.data.lock();
-                let node_data: &NodeData = l.as_ref().unwrap();
+                let l: Ref<NodeData> = node.data.borrow();
+                let node_data: &NodeData = &l;
                 let node_data: *const NodeData = node_data;
                 let existing_op = node_id_map.get(&node_data).map(|x| x.clone());
                 let node_id;
@@ -227,14 +194,14 @@ impl fmt::Debug for Node {
                 }
             }
             pub fn is_visited(&self, node: &Node) -> bool {
-                let l = node.data.lock();
-                let node_data: &NodeData = l.as_ref().unwrap();
+                let l: Ref<NodeData> = node.data.borrow();
+                let node_data: &NodeData = &l;
                 let node_data: *const NodeData = node_data;
                 return self.visited.contains(&node_data);
             }
             pub fn mark_visitied(&mut self, node: &Node) {
-                let l = node.data.lock();
-                let node_data: &NodeData = l.as_ref().unwrap();
+                let l = node.data.borrow();
+                let node_data: &NodeData = &l;
                 let node_data: *const NodeData = node_data;
                 self.visited.insert(node_data);
             }
@@ -294,10 +261,9 @@ impl fmt::Debug for Node {
 
 impl WeakNode {
     pub fn upgrade(&self) -> Option<Node> {
-        let node_op = self.data.upgrade().map(|data| Node { data, sodium_ctx: self.sodium_ctx.clone(), gc_data: self.gc_data.clone() });
+        let node_op = self.data.upgrade().map(|data| Node { data, sodium_ctx: self.sodium_ctx.clone() });
         if let Some(ref node) = &node_op {
             node.sodium_ctx.inc_node_ref_count();
-            node.inc_ref_count();
         }
         node_op
     }

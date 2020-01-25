@@ -10,17 +10,17 @@ use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 use crate::impl_::lambda::{lambda1, lambda1_deps, lambda2_deps};
 
+use std::cell::RefCell;
 use std::mem;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::Weak;
+use bacon_rajan_cc::Cc;
+use bacon_rajan_cc::Weak;
 
 pub struct Stream<A> {
-    pub data: Arc<Mutex<StreamData<A>>>
+    pub data: Cc<RefCell<StreamData<A>>>
 }
 
 pub struct WeakStream<A> {
-    pub data: Weak<Mutex<StreamData<A>>>
+    pub data: Weak<RefCell<StreamData<A>>>
 }
 
 impl<A> Clone for Stream<A> {

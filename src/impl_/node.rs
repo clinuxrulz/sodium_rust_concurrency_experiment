@@ -161,16 +161,24 @@ impl Node {
 
     pub fn remove_dependency(&self, dependency: &Node) {
         self.with_data(|data: &mut NodeData| {
-            data.dependencies.retain(|n: &Node| !Arc::ptr_eq(&n.data, &dependency.data));
+            for i in 0..data.dependencies.len() {
+                let match_ = Arc::ptr_eq(&data.dependencies[i].data, &dependency.data);
+                if match_ {
+                    data.dependencies.remove(i);
+                    break;
+                }
+            }
         });
         dependency.with_data(|data: &mut NodeData| {
-            data.dependents.retain(|n: &WeakNode| {
-                if let Some(n) = n.upgrade() {
-                    !Arc::ptr_eq(&n.data, &self.data)
-                } else {
-                    false
+            for i in 0..data.dependents.len() {
+                let n_op = data.dependents[i].upgrade();
+                if let Some(n) = n_op {
+                    if Arc::ptr_eq(&n.data, &self.data) {
+                        data.dependents.remove(i);
+                        break;
+                    }
                 }
-            })
+            }
         });
     }
 

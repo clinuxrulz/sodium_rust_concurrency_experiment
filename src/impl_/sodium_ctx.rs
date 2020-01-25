@@ -362,10 +362,7 @@ impl SodiumCtx {
                 break;
             }
             for gc_root in gc_roots {
-                let gc_root_op = gc_root.upgrade();
-                if let Some(gc_root) = gc_root_op {
-                    self.gc_process_root(gc_root);
-                }
+                self.gc_process_root(gc_root);
             }
         }
         self.with_data(|data: &mut SodiumCtxData| {
@@ -374,7 +371,12 @@ impl SodiumCtx {
         });
     }
 
-    pub fn gc_process_root(&self, node: Node) {
+    pub fn gc_process_root(&self, node: WeakNode) {
+        let node_op = node.upgrade();
+        if node_op.is_none() {
+            return;
+        }
+        let node = node_op.unwrap();
         let mut ref_count_adj: usize = 0;
         let mut visited: Vec<Node> = Vec::new();
         self.gc_calc_ref_count_adj(&node, None, &mut ref_count_adj, &mut visited);

@@ -10,7 +10,7 @@ pub struct StreamLoop<A:'static> {
 }
 
 impl<A> Trace for StreamLoop<A> {
-    fn trace(&mut self, tracer: &mut Tracer) {
+    fn trace(&self, tracer: &mut Tracer) {
         tracer(&self.data);
     }
 }
@@ -21,7 +21,7 @@ pub struct StreamLoopData<A:'static> {
 }
 
 impl<A> Trace for StreamLoopData<A> {
-    fn trace(&mut self, tracer: &mut Tracer) {
+    fn trace(&self, tracer: &mut Tracer) {
         self.stream.trace(tracer);
     }
 }

@@ -27,12 +27,12 @@ pub struct CellLoopData<A:'static> {
 }
 
 impl<A> Trace for CellLoopData<A> {
-    fn trace(&mut self, tracer: &mut Tracer) {
+    fn trace(&self, tracer: &mut Tracer) {
         self.stream_loop.trace(tracer);
     }
 }
 
-impl<A:Send+Clone+'static> CellLoop<A> {
+impl<A:Clone+'static> CellLoop<A> {
 
     pub fn new(sodium_ctx: &SodiumCtx) -> CellLoop<A> {
         let init_value_op: Rc<RefCell<Option<A>>> = Rc::new(RefCell::new(None));
@@ -40,7 +40,7 @@ impl<A:Send+Clone+'static> CellLoop<A> {
         {
             let init_value_op = init_value_op.clone();
             init_value = Lazy::new(move || {
-                let l = init_value_op.borrow_mut();
+                let mut l = init_value_op.borrow_mut();
                 let init_value_op: &mut Option<A> = &mut l;
                 let mut result_op: Option<A> = None;
                 mem::swap(&mut result_op, init_value_op);
@@ -68,14 +68,14 @@ impl<A:Send+Clone+'static> CellLoop<A> {
     pub fn loop_(&self, ca: &Cell<A>) {
         self.with_data(|data: &mut CellLoopData<A>| {
             data.stream_loop.loop_(&ca.updates());
-            let l = data.init_value_op.borrow_mut();
+            let mut l = data.init_value_op.borrow_mut();
             let init_value_op: &mut Option<A> = &mut l;
             *init_value_op = Some(ca.sample());
         });
     }
 
     pub fn with_data<R,K:FnOnce(&mut CellLoopData<A>)->R>(&self, k: K) -> R {
-        let l = self.data.borrow_mut();
+        let mut l = self.data.borrow_mut();
         let data: &mut CellLoopData<A> = &mut l;
         k(data)
     }

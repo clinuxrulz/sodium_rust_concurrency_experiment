@@ -24,7 +24,7 @@ pub struct Cell<A:'static> {
 }
 
 impl<A> Trace for Cell<A> {
-    fn trace(&mut self, tracer: &mut Tracer) {
+    fn trace(&self, tracer: &mut Tracer) {
         tracer(&self.data);
     }
 }
@@ -49,7 +49,7 @@ pub struct CellData<A:'static> {
 }
 
 impl<A> Trace for CellData<A> {
-    fn trace(&mut self, tracer: &mut Tracer) {
+    fn trace(&self, tracer: &mut Tracer) {
         self.stream.trace(tracer);
         self.node.trace(tracer);
     }
@@ -186,8 +186,8 @@ impl<A:'static> Cell<A> {
             let rhs = rhs.clone();
             let f = f.clone();
             init = Lazy::new(move || {
-                let l = f.borrow();
-                let f = &l;
+                let mut l = f.borrow_mut();
+                let f = &mut l;
                 f.call(&lhs.run(), &rhs.run())
             });
         }
@@ -263,12 +263,12 @@ impl<A:'static> Cell<A> {
     }
 
     pub fn lift5<
-        B:Send+Clone+'static,
-        C:Send+Clone+'static,
-        D:Send+Clone+'static,
-        E:Send+Clone+'static,
-        F:Send+Clone+'static,
-        FN:IsLambda5<A,B,C,D,E,F>+Send+'static
+        B:Clone+'static,
+        C:Clone+'static,
+        D:Clone+'static,
+        E:Clone+'static,
+        F:Clone+'static,
+        FN:IsLambda5<A,B,C,D,E,F>+'static
     >(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, ce: &Cell<E>, mut f: FN) -> Cell<F> where A: Clone {
         let f_deps = lambda5_deps(&f);
         self
@@ -285,13 +285,13 @@ impl<A:'static> Cell<A> {
     }
 
     pub fn lift6<
-        B:Send+Clone+'static,
-        C:Send+Clone+'static,
-        D:Send+Clone+'static,
-        E:Send+Clone+'static,
-        F:Send+Clone+'static,
-        G:Send+Clone+'static,
-        FN:IsLambda6<A,B,C,D,E,F,G>+Send+'static
+        B:Clone+'static,
+        C:Clone+'static,
+        D:Clone+'static,
+        E:Clone+'static,
+        F:Clone+'static,
+        G:Clone+'static,
+        FN:IsLambda6<A,B,C,D,E,F,G>+'static
     >(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, ce: &Cell<E>, cf: &Cell<F>, mut f: FN) -> Cell<G> where A: Clone {
         let f_deps = lambda6_deps(&f);
         self
@@ -359,7 +359,7 @@ impl<A:'static> Cell<A> {
                                             node1.remove_dependency(&dep);
                                         }
                                         node1.add_dependency(firing.node());
-                                        let l = inner_s.borrow_mut();
+                                        let mut l = inner_s.borrow_mut();
                                         let inner_s: &mut WeakStream<A> = &mut l;
                                         *inner_s = Stream::downgrade(&firing);
                                     });
@@ -419,7 +419,7 @@ impl<A:'static> Cell<A> {
                                         sa._send(firing2.clone());
                                     }
                                 });
-                                let l = last_inner_s.borrow_mut();
+                                let mut l = last_inner_s.borrow_mut();
                                 let last_inner_s: &mut WeakStream<A> = &mut l;
                                 node2.remove_dependency(&last_inner_s.upgrade().unwrap().node());
                                 node2.add_dependency(new_inner_s.node());

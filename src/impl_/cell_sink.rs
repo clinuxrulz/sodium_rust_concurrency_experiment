@@ -16,7 +16,7 @@ impl<A> Clone for CellSink<A> {
     }
 }
 
-impl<A:Send+Clone+'static> CellSink<A> {
+impl<A:Clone+'static> CellSink<A> {
     pub fn new(sodium_ctx: &SodiumCtx, a: A) -> CellSink<A> {
         let stream_sink = StreamSink::new(sodium_ctx);
         CellSink {

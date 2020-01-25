@@ -11,7 +11,7 @@ use crate::sodium_ctx::SodiumCtx;
 use crate::stream::Stream;
 use crate::impl_::node::Node;
 
-pub struct Cell<A> {
+pub struct Cell<A:'static> {
     pub impl_: CellImpl<A>
 }
 
@@ -21,7 +21,7 @@ impl<A> Clone for Cell<A> {
     }
 }
 
-impl<A:Clone+Send+'static> Cell<A> {
+impl<A:Clone+'static> Cell<A> {
     pub fn new(sodium_ctx: &SodiumCtx, value: A) -> Cell<A> {
         Cell { impl_: CellImpl::new(&sodium_ctx.impl_, value) }
     }
@@ -46,27 +46,27 @@ impl<A:Clone+Send+'static> Cell<A> {
         Stream { impl_: self.impl_.value() }
     }
 
-    pub fn map<B:Clone+Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, f: FN) -> Cell<B> {
+    pub fn map<B:Clone+'static,FN:IsLambda1<A,B>+'static>(&self, f: FN) -> Cell<B> {
         Cell { impl_: self.impl_.map(f) }
     }
 
-    pub fn lift2<B:Clone+Send+'static,C:Clone+Send+'static,FN:IsLambda2<A,B,C>+Send+'static>(&self, cb: &Cell<B>, f: FN) -> Cell<C> {
+    pub fn lift2<B:Clone+'static,C:Clone+'static,FN:IsLambda2<A,B,C>+'static>(&self, cb: &Cell<B>, f: FN) -> Cell<C> {
         Cell { impl_: self.impl_.lift2(&cb.impl_, f) }
     }
 
-    pub fn lift3<B:Clone+Send+'static,C:Clone+Send+'static,D:Clone+Send+'static,FN:IsLambda3<A,B,C,D>+Send+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, f: FN) -> Cell<D> {
+    pub fn lift3<B:Clone+'static,C:Clone+'static,D:Clone+'static,FN:IsLambda3<A,B,C,D>+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, f: FN) -> Cell<D> {
         Cell { impl_: self.impl_.lift3(&cb.impl_, &cc.impl_, f) }
     }
 
-    pub fn lift4<B:Clone+Send+'static,C:Clone+Send+'static,D:Clone+Send+'static,E:Clone+Send+'static,FN:IsLambda4<A,B,C,D,E>+Send+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, f: FN) -> Cell<E> {
+    pub fn lift4<B:Clone+'static,C:Clone+'static,D:Clone+'static,E:Clone+'static,FN:IsLambda4<A,B,C,D,E>+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, f: FN) -> Cell<E> {
         Cell { impl_: self.impl_.lift4(&cb.impl_, &cc.impl_, &cd.impl_, f) }
     }
 
-    pub fn lift5<B:Clone+Send+'static,C:Clone+Send+'static,D:Clone+Send+'static,E:Clone+Send+'static,F:Clone+Send+'static,FN:IsLambda5<A,B,C,D,E,F>+Send+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, ce: &Cell<E>, f: FN) -> Cell<F> {
+    pub fn lift5<B:Clone+'static,C:Clone+'static,D:Clone+'static,E:Clone+'static,F:Clone+'static,FN:IsLambda5<A,B,C,D,E,F>+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, ce: &Cell<E>, f: FN) -> Cell<F> {
         Cell { impl_: self.impl_.lift5(&cb.impl_, &cc.impl_, &cd.impl_, &ce.impl_, f) }
     }
 
-    pub fn lift6<B:Clone+Send+'static,C:Clone+Send+'static,D:Clone+Send+'static,E:Clone+Send+'static,F:Clone+Send+'static,G:Clone+Send+'static,FN:IsLambda6<A,B,C,D,E,F,G>+Send+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, ce: &Cell<E>, cf: &Cell<F>, f: FN) -> Cell<G> {
+    pub fn lift6<B:Clone+'static,C:Clone+'static,D:Clone+'static,E:Clone+'static,F:Clone+'static,G:Clone+'static,FN:IsLambda6<A,B,C,D,E,F,G>+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, ce: &Cell<E>, cf: &Cell<F>, f: FN) -> Cell<G> {
         Cell { impl_: self.impl_.lift6(&cb.impl_, &cc.impl_, &cd.impl_, &ce.impl_, &cf.impl_, f) }
     }
 
@@ -78,11 +78,11 @@ impl<A:Clone+Send+'static> Cell<A> {
         Cell { impl_: CellImpl::switch_c(&cca.map(|ca: &Cell<A>| ca.impl_.clone()).impl_) }
     }
 
-    pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, k: K) -> Listener {
+    pub fn listen_weak<K: FnMut(&A)+'static>(&self, k: K) -> Listener {
         Listener { impl_: self.impl_.listen_weak(k) }
     }
 
-    pub fn listen<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
+    pub fn listen<K:IsLambda1<A,()>+'static>(&self, k: K) -> Listener {
         Listener { impl_: self.impl_.listen(k) }
     }
 }

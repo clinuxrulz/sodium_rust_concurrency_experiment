@@ -2,7 +2,7 @@ use crate::impl_::stream_sink::StreamSink as StreamSinkImpl;
 use crate::sodium_ctx::SodiumCtx;
 use crate::stream::Stream;
 
-pub struct StreamSink<A> {
+pub struct StreamSink<A:'static> {
     pub impl_: StreamSinkImpl<A>
 }
 
@@ -14,12 +14,12 @@ impl<A> Clone for StreamSink<A> {
     }
 }
 
-impl<A:Clone+Send+'static> StreamSink<A> {
+impl<A:Clone+'static> StreamSink<A> {
     pub fn new(sodium_ctx: &SodiumCtx) -> StreamSink<A> {
         StreamSink { impl_: StreamSinkImpl::new(&sodium_ctx.impl_) }
     }
 
-    pub fn new_with_coalescer<COALESCER:FnMut(&A,&A)->A+Send+'static>(sodium_ctx: &SodiumCtx, coalescer: COALESCER) -> StreamSink<A> {
+    pub fn new_with_coalescer<COALESCER:FnMut(&A,&A)->A+'static>(sodium_ctx: &SodiumCtx, coalescer: COALESCER) -> StreamSink<A> {
         StreamSink { impl_: StreamSinkImpl::new_with_coalescer(&sodium_ctx.impl_, coalescer) }
     }
 

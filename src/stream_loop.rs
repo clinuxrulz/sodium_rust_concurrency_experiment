@@ -2,11 +2,11 @@ use crate::impl_::stream_loop::StreamLoop as StreamLoopImpl;
 use crate::SodiumCtx;
 use crate::Stream;
 
-pub struct StreamLoop<A> {
+pub struct StreamLoop<A:'static> {
     pub impl_: StreamLoopImpl<A>
 }
 
-impl<A:Send+Clone+'static> StreamLoop<A> {
+impl<A:Clone+'static> StreamLoop<A> {
 
     pub fn new(sodium_ctx: &SodiumCtx) -> StreamLoop<A> {
         StreamLoop { impl_: StreamLoopImpl::new(&sodium_ctx.impl_) }

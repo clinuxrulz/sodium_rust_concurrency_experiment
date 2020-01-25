@@ -12,8 +12,8 @@ pub struct Node {
 }
 
 impl Trace for Node {
-    fn trace(&mut self, tracer: &mut Tracer) {
-        tracer(&mut self.data);
+    fn trace(&self, tracer: &mut Tracer) {
+        tracer(&self.data);
     }
 }
 
@@ -35,11 +35,11 @@ pub struct NodeData {
 }
 
 impl Trace for NodeData {
-    fn trace(&mut self, tracer: &mut Tracer) {
-        for node in &mut self.dependencies {
+    fn trace(&self, tracer: &mut Tracer) {
+        for node in &self.dependencies {
             node.trace(tracer);
         }
-        for node in &mut self.keep_alive {
+        for node in &self.keep_alive {
             node.trace(tracer);
         }
     }
@@ -64,8 +64,8 @@ impl Drop for Node {
 impl Drop for NodeData {
     fn drop(&mut self) {
         self.sodium_ctx.dec_node_count();
-        for dependency in self.dependencies {
-            let dep: RefMut<NodeData> = dependency.data.borrow_mut();
+        for dependency in &mut self.dependencies {
+            let mut dep: RefMut<NodeData> = dependency.data.borrow_mut();
             dep.dependents.retain(|node: &WeakNode| node.data.upgrade().is_some());
         }
     }
@@ -91,7 +91,7 @@ impl Node {
                 sodium_ctx: sodium_ctx.clone()
             };
         for dependency in dependencies {
-            let dependency2: RefMut<NodeData> = dependency.data.borrow_mut();
+            let mut dependency2: RefMut<NodeData> = dependency.data.borrow_mut();
             dependency2.dependents.push(Node::downgrade(&result));
         }
         sodium_ctx.inc_node_ref_count();
@@ -156,7 +156,7 @@ impl Node {
     }
 
     pub fn with_data<R,K:FnOnce(&mut NodeData)->R>(&self, k: K) -> R {
-        let l: RefMut<NodeData> = self.data.borrow_mut();
+        let mut l: RefMut<NodeData> = self.data.borrow_mut();
         let data: &mut NodeData = &mut l;
         k(data)
     }

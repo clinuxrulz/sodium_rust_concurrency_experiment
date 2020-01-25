@@ -2,7 +2,7 @@ use crate::Cell;
 use crate::SodiumCtx;
 use crate::impl_::cell_loop::CellLoop as CellLoopImpl;
 
-pub struct CellLoop<A> {
+pub struct CellLoop<A:'static> {
     impl_: CellLoopImpl<A>
 }
 
@@ -14,7 +14,7 @@ impl<A> Clone for CellLoop<A> {
     }
 }
 
-impl<A:Send+Clone+'static> CellLoop<A> {
+impl<A:Clone+'static> CellLoop<A> {
 
     pub fn new(sodium_ctx: &SodiumCtx) -> CellLoop<A> {
         CellLoop {

@@ -19,7 +19,7 @@ pub struct Stream<A:'static> {
 }
 
 impl<A> Trace for Stream<A> {
-    fn trace(&mut self, tracer: &mut Tracer) {
+    fn trace(&self, tracer: &mut Tracer) {
         tracer(&self.data);
     }
 }
@@ -52,7 +52,7 @@ pub struct StreamData<A> {
 }
 
 impl<A> Trace for StreamData<A> {
-    fn trace(&mut self, tracer: &mut Tracer) {
+    fn trace(&self, tracer: &mut Tracer) {
         self.node.trace(tracer);
     }
 }
@@ -398,7 +398,7 @@ impl<A:'static> Stream<A> {
     }
 
     pub fn with_data<R,K:FnOnce(&mut StreamData<A>)->R>(&self, k: K) -> R {
-        let l = self.data.borrow_mut();
+        let mut l = self.data.borrow_mut();
         let data: &mut StreamData<A> = &mut l;
         k(data)
     }

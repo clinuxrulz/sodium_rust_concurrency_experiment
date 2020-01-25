@@ -140,7 +140,7 @@ impl Node {
         });
     }
 
-    pub fn add_keep_alive<X:Trace+'static>(&self, dep: Dep) {
+    pub fn add_keep_alive(&self, dep: Dep) {
         self.with_data(|data: &mut NodeData| {
             data.keep_alive.push(dep);
         });

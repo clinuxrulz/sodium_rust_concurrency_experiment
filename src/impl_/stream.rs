@@ -1,4 +1,5 @@
 use crate::impl_::cell::Cell;
+use crate::impl_::dep::Dep;
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
 use crate::impl_::lazy::Lazy;
@@ -68,7 +69,7 @@ impl<A:'static> Stream<A> {
                     move || {},
                     Vec::new()
                 );
-                node.add_keep_alive(s.clone());
+                node.add_keep_alive(Dep::new(s));
                 node
             }
         )

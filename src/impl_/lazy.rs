@@ -20,7 +20,7 @@ pub enum LazyData<A> {
 
 impl<A:Clone+'static> Lazy<A> {
 
-    pub fn new<THUNK:FnMut()->A+Send+'static>(thunk: THUNK) -> Lazy<A> {
+    pub fn new<THUNK:FnMut()->A+'static>(thunk: THUNK) -> Lazy<A> {
         Lazy {
             data: Arc::new(Mutex::new(LazyData::Thunk(Box::new(thunk))))
         }

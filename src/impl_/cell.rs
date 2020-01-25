@@ -14,17 +14,23 @@ use crate::impl_::lambda::IsLambda5;
 use crate::impl_::lambda::IsLambda6;
 use crate::impl_::lambda::{lambda1, lambda2, lambda3, lambda2_deps, lambda3_deps, lambda4_deps, lambda5_deps, lambda6_deps};
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::mem;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::Weak;
+use bacon_rajan_cc::{Cc, Trace, Tracer, Weak};
 
-pub struct Cell<A> {
-    data: Arc<Mutex<CellData<A>>>
+pub struct Cell<A:'static> {
+    data: Cc<RefCell<CellData<A>>>
 }
 
-pub struct WeakCell<A> {
-    data: Weak<Mutex<CellData<A>>>
+impl<A> Trace for Cell<A> {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        tracer(&self.data);
+    }
+}
+
+pub struct WeakCell<A:'static> {
+    data: Weak<RefCell<CellData<A>>>
 }
 
 impl<A> Clone for Cell<A> {
@@ -35,17 +41,24 @@ impl<A> Clone for Cell<A> {
     }
 }
 
-pub struct CellData<A> {
+pub struct CellData<A:'static> {
     value: Lazy<A>,
     next_value_op: Option<A>,
     stream: Stream<A>,
     node: Node
 }
 
+impl<A> Trace for CellData<A> {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        self.stream.trace(tracer);
+        self.node.trace(tracer);
+    }
+}
+
 impl<A:'static> Cell<A> {
     pub fn new(sodium_ctx: &SodiumCtx, value: A) -> Cell<A> where A: Clone {
         Cell {
-            data: Arc::new(Mutex::new(CellData {
+            data: Cc::new(RefCell::new(CellData {
                 value: Lazy::of_value(value),
                 next_value_op: None,
                 stream: Stream::new(sodium_ctx),
@@ -66,7 +79,7 @@ impl<A:'static> Cell<A> {
                 }
             });
         let c = Cell {
-            data: Arc::new(Mutex::new(CellData {
+            data: Cc::new(RefCell::new(CellData {
                 value: init_value,
                 next_value_op: None,
                 stream: stream.clone(),
@@ -156,52 +169,52 @@ impl<A:'static> Cell<A> {
         })
     }
 
-    pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, mut f: FN) -> Cell<B> where A: Clone, B: Clone {
+    pub fn map<B:'static,FN:IsLambda1<A,B>+'static>(&self, mut f: FN) -> Cell<B> where A: Clone, B: Clone {
         let init = f.call(&self.sample());
         self.updates().map(f).hold(init)
     }
 
-    pub fn lift2<B:Send+Clone+'static,C:Send+Clone+'static,FN:IsLambda2<A,B,C>+Send+'static>(&self, cb: &Cell<B>, f: FN) -> Cell<C> where A: Clone {
+    pub fn lift2<B:Clone+'static,C:Clone+'static,FN:IsLambda2<A,B,C>+'static>(&self, cb: &Cell<B>, f: FN) -> Cell<C> where A: Clone {
         let sodium_ctx = self.sodium_ctx();
         let lhs = self.sample_lazy();
         let rhs = cb.sample_lazy();
         let init: Lazy<C>;
         let f_deps = lambda2_deps(&f);
-        let f = Arc::new(Mutex::new(f));
+        let f = Rc::new(RefCell::new(f));
         {
             let lhs = lhs.clone();
             let rhs = rhs.clone();
             let f = f.clone();
             init = Lazy::new(move || {
-                let mut l = f.lock();
-                let f = l.as_mut().unwrap();
+                let l = f.borrow();
+                let f = &l;
                 f.call(&lhs.run(), &rhs.run())
             });
         }
-        let state: Arc<Mutex<(Lazy<A>,Lazy<B>)>> = Arc::new(Mutex::new((lhs, rhs)));
+        let state: Rc<RefCell<(Lazy<A>,Lazy<B>)>> = Rc::new(RefCell::new((lhs, rhs)));
         let s1: Stream<()>;
         let s2: Stream<()>;
         {
             let state = state.clone();
             s1 = self.updates().map(move |a: &A| {
-                let mut l = state.lock();
-                let state2: &mut (Lazy<A>,Lazy<B>) = l.as_mut().unwrap();
+                let mut l = state.borrow_mut();
+                let state2: &mut (Lazy<A>,Lazy<B>) = &mut l;
                 state2.0 = Lazy::of_value(a.clone());
             });
         }
         {
             let state = state.clone();
             s2 = cb.updates().map(move |b: &B| {
-                let mut l = state.lock();
-                let state2: &mut (Lazy<A>,Lazy<B>) = l.as_mut().unwrap();
+                let mut l = state.borrow_mut();
+                let state2: &mut (Lazy<A>,Lazy<B>) = &mut l;
                 state2.1 = Lazy::of_value(b.clone());
             });
         }
         let s = s1.or_else(&s2).map(lambda1(move |_: &()| {
-            let l = state.lock();
-            let state2: &(Lazy<A>,Lazy<B>) = l.as_ref().unwrap();
-            let mut l = f.lock();
-            let f = l.as_mut().unwrap();
+            let l = state.borrow();
+            let state2: &(Lazy<A>,Lazy<B>) = &l;
+            let mut l = f.borrow_mut();
+            let f = &mut l;
             f.call(&state2.0.run(), &state2.1.run())
         }, f_deps));
         Cell::_new(
@@ -212,10 +225,10 @@ impl<A:'static> Cell<A> {
     }
 
     pub fn lift3<
-        B:Send+Clone+'static,
-        C:Send+Clone+'static,
-        D:Send+Clone+'static,
-        FN:IsLambda3<A,B,C,D>+Send+'static
+        B:Clone+'static,
+        C:Clone+'static,
+        D:Clone+'static,
+        FN:IsLambda3<A,B,C,D>+'static
     >(&self, cb: &Cell<B>, cc: &Cell<C>, mut f: FN) -> Cell<D> where A: Clone {
         let f_deps = lambda3_deps(&f);
         self
@@ -230,11 +243,11 @@ impl<A:'static> Cell<A> {
     }
 
     pub fn lift4<
-        B:Send+Clone+'static,
-        C:Send+Clone+'static,
-        D:Send+Clone+'static,
-        E:Send+Clone+'static,
-        FN:IsLambda4<A,B,C,D,E>+Send+'static
+        B:Clone+'static,
+        C:Clone+'static,
+        D:Clone+'static,
+        E:Clone+'static,
+        FN:IsLambda4<A,B,C,D,E>+'static
     >(&self, cb: &Cell<B>, cc: &Cell<C>, cd: &Cell<D>, mut f: FN) -> Cell<E> where A: Clone {
         let f_deps = lambda4_deps(&f);
         self
@@ -301,7 +314,7 @@ impl<A:'static> Cell<A> {
         Stream::_new(
             &sodium_ctx,
             |sa: &Stream<A>| {
-                let inner_s: Arc<Mutex<WeakStream<A>>> = Arc::new(Mutex::new(Stream::downgrade(&csa.sample())));
+                let inner_s: Rc<RefCell<WeakStream<A>>> = Rc::new(RefCell::new(Stream::downgrade(&csa.sample())));
                 let sa = sa.clone();
                 let node1: Node;
                 {
@@ -310,8 +323,8 @@ impl<A:'static> Cell<A> {
                     node1 = Node::new(
                         &sodium_ctx,
                         move || {
-                            let l = inner_s.lock();
-                            let inner_s: &WeakStream<A> = l.as_ref().unwrap();
+                            let l = inner_s.borrow();
+                            let inner_s: &WeakStream<A> = &l;
                             let inner_s = inner_s.upgrade().unwrap();
                             inner_s.with_firing_op(|firing_op: &mut Option<A>| {
                                 if let Some(ref firing) = firing_op {
@@ -346,8 +359,8 @@ impl<A:'static> Cell<A> {
                                             node1.remove_dependency(&dep);
                                         }
                                         node1.add_dependency(firing.node());
-                                        let mut l = inner_s.lock();
-                                        let inner_s: &mut WeakStream<A> = l.as_mut().unwrap();
+                                        let l = inner_s.borrow_mut();
+                                        let inner_s: &mut WeakStream<A> = &mut l;
                                         *inner_s = Stream::downgrade(&firing);
                                     });
                                 }
@@ -376,7 +389,7 @@ impl<A:'static> Cell<A> {
                     vec![cca.updates().node()]
                 );
                 let init_inner_s = cca.sample().updates();
-                let last_inner_s = Arc::new(Mutex::new(Stream::downgrade(&init_inner_s)));
+                let last_inner_s = Rc::new(RefCell::new(Stream::downgrade(&init_inner_s)));
                 let node2 = Node::new(
                     &sodium_ctx,
                     || {},
@@ -406,8 +419,8 @@ impl<A:'static> Cell<A> {
                                         sa._send(firing2.clone());
                                     }
                                 });
-                                let mut l = last_inner_s.lock();
-                                let last_inner_s: &mut WeakStream<A> = l.as_mut().unwrap();
+                                let l = last_inner_s.borrow_mut();
+                                let last_inner_s: &mut WeakStream<A> = &mut l;
                                 node2.remove_dependency(&last_inner_s.upgrade().unwrap().node());
                                 node2.add_dependency(new_inner_s.node());
                                 node2.with_data(|data: &mut NodeData| data.changed = true);
@@ -422,8 +435,8 @@ impl<A:'static> Cell<A> {
                     let last_inner_s = last_inner_s.clone();
                     let sa = Stream::downgrade(sa);
                     let node2_update = move || {
-                        let l = last_inner_s.lock();
-                        let last_inner_s: &WeakStream<A> = l.as_ref().unwrap();
+                        let l = last_inner_s.borrow();
+                        let last_inner_s: &WeakStream<A> = &l;
                         let last_inner_s = last_inner_s.upgrade().unwrap();
                         last_inner_s.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
@@ -440,27 +453,27 @@ impl<A:'static> Cell<A> {
         .hold_lazy(Lazy::new(move || cca2.sample().sample()))
     }
 
-    pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, k: K) -> Listener where A: Clone {
+    pub fn listen_weak<K: FnMut(&A)+'static>(&self, k: K) -> Listener where A: Clone {
         self.sodium_ctx().transaction(|| {
             self.value().listen_weak(k)
         })
     }
 
-    pub fn listen<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener where A: Clone {
+    pub fn listen<K:IsLambda1<A,()>+'static>(&self, k: K) -> Listener where A: Clone {
         self.sodium_ctx().transaction(|| {
             self.value().listen(k)
         })
     }
 
     pub fn with_data<R,K:FnOnce(&mut CellData<A>)->R>(&self, k: K) -> R {
-        let mut l = self.data.lock();
-        let data: &mut CellData<A> = l.as_mut().unwrap();
+        let mut l = self.data.borrow_mut();
+        let data: &mut CellData<A> = &mut l;
         k(data)
     }
 
     pub fn downgrade(this: &Self) -> WeakCell<A> {
         WeakCell {
-            data: Arc::downgrade(&this.data)
+            data: Cc::downgrade(&this.data)
         }
     }
 }

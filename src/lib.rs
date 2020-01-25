@@ -12,6 +12,7 @@ mod stream_sink;
 pub use self::cell::Cell;
 pub use self::cell_loop::CellLoop;
 pub use self::cell_sink::CellSink;
+pub use self::impl_::dep::Dep;
 pub use self::impl_::lambda::IsLambda1;
 pub use self::impl_::lambda::IsLambda2;
 pub use self::impl_::lambda::IsLambda3;

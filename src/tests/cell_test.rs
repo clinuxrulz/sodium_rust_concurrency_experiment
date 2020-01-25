@@ -79,17 +79,26 @@ fn map_c() {
     let sodium_ctx = &mut sodium_ctx;
     {
         let c = sodium_ctx.new_cell_sink(6);
+        //sodium_ctx.impl_.collect_cycles();
         let out = Arc::new(Mutex::new(Vec::new()));
         let l;
         {
             let out = out.clone();
-            l = c.cell().map(|a: &i32| format!("{}", a)).listen(
-                move |a: &String|
-                    out.lock().as_mut().unwrap().push(a.clone())
+            let tmp1 = c.cell();
+            //sodium_ctx.impl_.collect_cycles();
+            let tmp2 = tmp1.map(|a: &i32| format!("{}", a));
+            sodium_ctx.impl_.collect_cycles();
+            l = tmp2.listen(
+              move |a: &String|
+                  out.lock().as_mut().unwrap().push(a.clone())
             );
+            println!("{:?}", l.impl_.node_op().unwrap());
+            //sodium_ctx.impl_.collect_cycles();
         }
         c.send(8);
+        //sodium_ctx.impl_.collect_cycles();
         l.unlisten();
+        //sodium_ctx.impl_.collect_cycles();
         {
             let l = out.lock();
             let out: &Vec<String> = l.as_ref().unwrap();

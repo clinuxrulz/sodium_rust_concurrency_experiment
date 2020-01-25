@@ -316,18 +316,17 @@ impl<A:'static> Cell<A> {
         Stream::_new(
             &sodium_ctx,
             |sa: &Stream<A>| {
-                let inner_s: Rc<RefCell<WeakStream<A>>> = Rc::new(RefCell::new(Stream::downgrade(&csa.sample())));
+                let inner_s: Cc<RefCell<Stream<A>>> = Cc::new(RefCell::new(csa.sample()));
                 let sa = sa.clone();
                 let node1: Node;
                 {
-                    let inner_s = inner_s.clone();
+                    let inner_s = Cc::downgrade(&inner_s);
                     let sa = Stream::downgrade(&sa);
                     node1 = Node::new(
                         &sodium_ctx,
                         move || {
-                            let l = inner_s.borrow();
-                            let inner_s: &WeakStream<A> = &l;
-                            let inner_s = inner_s.upgrade().unwrap();
+                            let l = inner_s.upgrade().unwrap().borrow();
+                            let inner_s: &Stream<A> = &l;
                             inner_s.with_firing_op(|firing_op: &mut Option<A>| {
                                 if let Some(ref firing) = firing_op {
                                     let sa = sa.upgrade().unwrap();
@@ -338,15 +337,19 @@ impl<A:'static> Cell<A> {
                         vec![csa.sample().node()]
                     );
                 }
+                node1.add_keep_alive(Dep::new(inner_s));
+                node1.add_keep_alive(Dep::new(sa));
                 let node2: Node;
                 {
-                    let node1: Node = node1.clone();
+                    let inner_s = Cc::downgrade(&inner_s);
+                    let node1 = Node::downgrade(&node1);
                     let csa2 = csa.clone();
                     let sodium_ctx = sodium_ctx.clone();
                     let sodium_ctx2 = sodium_ctx.clone();
                     node2 = Node::new(
                         &sodium_ctx2,
                         move || {
+                            let node1 = node1.upgrade().unwrap();
                             csa.updates().with_firing_op(|firing_op: &mut Option<Stream<A>>| {
                                 if let Some(ref firing) = firing_op {
                                     let firing = firing.clone();
@@ -361,9 +364,9 @@ impl<A:'static> Cell<A> {
                                             node1.remove_dependency(&dep);
                                         }
                                         node1.add_dependency(firing.node());
-                                        let mut l = inner_s.borrow_mut();
-                                        let inner_s: &mut WeakStream<A> = &mut l;
-                                        *inner_s = Stream::downgrade(&firing);
+                                        let mut l = inner_s.upgrade().unwrap().borrow_mut();
+                                        let inner_s: &mut Stream<A> = &mut l;
+                                        *inner_s = firing;
                                     });
                                 }
                             });
@@ -371,8 +374,9 @@ impl<A:'static> Cell<A> {
                         vec![csa2.updates().node()]
                     );
                 }
-                node2.add_update_dependencies(vec![node1.clone()]);
-                node1.add_keep_alive(&node2);
+                node2.add_keep_alive(Dep::new(node1));
+                node2.add_keep_alive(Dep::new(inner_s));
+                node1.add_keep_alive(Dep::new(node2));
                 return node1;
             }
         )
@@ -391,7 +395,7 @@ impl<A:'static> Cell<A> {
                     vec![cca.updates().node()]
                 );
                 let init_inner_s = cca.sample().updates();
-                let last_inner_s = Rc::new(RefCell::new(Stream::downgrade(&init_inner_s)));
+                let last_inner_s = Cc::new(RefCell::new(init_inner_s));
                 let node2 = Node::new(
                     &sodium_ctx,
                     || {},
@@ -400,17 +404,21 @@ impl<A:'static> Cell<A> {
                 let node1_update;
                 {
                     let sodium_ctx = sodium_ctx.clone();
-                    let node1 = node1.clone();
-                    let node2 = node2.clone();
-                    let cca = cca.clone();
+                    let node1 = Node::downgrade(&node1);
+                    let node2 = Node::downgrade(&node2);
+                    let cca = Cell::downgrade(&cca);
                     let sa = Stream::downgrade(sa);
-                    let last_inner_s = last_inner_s.clone();
+                    let last_inner_s = Cc::downgrade(&last_inner_s);
                     node1_update = move || {
+                        let cca = cca.upgrade().unwrap();
+                        let node1 = node1.upgrade().unwrap();
+                        let node2 = node2.upgrade().unwrap();
+                        let sa = sa.upgrade().unwrap();
+                        let last_inner_s = last_inner_s.upgrade().unwrap();
                         cca.updates().with_firing_op(|firing_op: &mut Option<Cell<A>>| {
                             if let Some(ref firing) = firing_op {
                                 // will be overwriten by node2 firing if there is one
                                 sodium_ctx.update_node(&firing.updates().node());
-                                let sa = sa.upgrade().unwrap();
                                 sa._send(firing.sample());
                                 //
                                 node1.with_data(|data: &mut NodeData| data.changed = true);
@@ -422,24 +430,30 @@ impl<A:'static> Cell<A> {
                                     }
                                 });
                                 let mut l = last_inner_s.borrow_mut();
-                                let last_inner_s: &mut WeakStream<A> = &mut l;
-                                node2.remove_dependency(&last_inner_s.upgrade().unwrap().node());
+                                let last_inner_s: &mut Stream<A> = &mut l;
+                                node2.remove_dependency(&last_inner_s.node());
                                 node2.add_dependency(new_inner_s.node());
                                 node2.with_data(|data: &mut NodeData| data.changed = true);
-                                *last_inner_s = Stream::downgrade(&new_inner_s);
+                                *last_inner_s = new_inner_s;
                             }
                         });
                     };
                 }
-                node1.add_update_dependencies(vec![node1.clone(), node2.clone()]);
+                node1.add_keep_alives(vec![
+                    Dep::new(cca.clone()),
+                    Dep::new(node1.clone()),
+                    Dep::new(node2.clone()),
+                    Dep::new(sa.clone()),
+                    Dep::new(last_inner_s.clone())
+                ]);
                 node1.with_data(|data: &mut NodeData| data.update = Box::new(node1_update));
                 {
-                    let last_inner_s = last_inner_s.clone();
+                    let last_inner_s = Cc::downgrade(&last_inner_s);
                     let sa = Stream::downgrade(sa);
                     let node2_update = move || {
-                        let l = last_inner_s.borrow();
-                        let last_inner_s: &WeakStream<A> = &l;
                         let last_inner_s = last_inner_s.upgrade().unwrap();
+                        let l = last_inner_s.borrow();
+                        let last_inner_s: &Stream<A> = &l;
                         last_inner_s.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
                                 let sa = sa.upgrade().unwrap();

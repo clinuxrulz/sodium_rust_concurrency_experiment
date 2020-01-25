@@ -1,4 +1,5 @@
 use crate::impl_::cell::Cell as CellImpl;
+use crate::impl_::dep::Dep;
 use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 use crate::impl_::lambda::IsLambda3;
@@ -36,6 +37,10 @@ impl<A:Clone+'static> Cell<A> {
 
     pub fn node(&self) -> Node {
         self.impl_.updates().node()
+    }
+
+    pub fn to_dep(&self) -> Dep {
+        Dep::new(self.impl_)
     }
 
     pub fn updates(&self) -> Stream<A> {

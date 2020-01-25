@@ -8,6 +8,7 @@ use crate::tests::assert_memory_freed;
 
 use std::sync::Arc;
 use std::sync::Mutex;
+use bacon_rajan_cc::Cc;
 
 #[test]
 fn map() {
@@ -590,7 +591,7 @@ fn switch_c() {
         let ca = ssc.stream().map(|s: &SC| s.a.clone()).filter_option().hold("A");
         let cb = ssc.stream().map(|s: &SC| s.b.clone()).filter_option().hold("a");
         let csw_str = ssc.stream().map(|s: &SC| s.sw.clone()).filter_option().hold("ca");
-        let csw_deps = vec![ca.node(), cb.node()];
+        let csw_deps = vec![ca.to_dep(), cb.to_dep()];
         let csw = csw_str.map(
             lambda1(
                 move |s: &&'static str|
@@ -661,7 +662,7 @@ fn switch_s() {
                 )
                 .filter_option()
                 .hold("sa");
-        let csw_deps = vec![sa.node(), sb.node()];
+        let csw_deps = vec![sa.to_dep(), sb.to_dep()];
         let csw: Cell<Stream<&'static str>> = csw_str.map(
             lambda1(
                 move |sw: &&'static str|

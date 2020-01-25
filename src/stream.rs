@@ -1,4 +1,5 @@
-use crate::cell::Cell;
+use crate::Cell;
+use crate::impl_::dep::Dep;
 use crate::impl_::stream::Stream as StreamImpl;
 use crate::impl_::node::Node;
 use crate::impl_::lambda::IsLambda1;
@@ -35,8 +36,8 @@ impl<A:Clone+'static> Stream<A> {
     }
 
     // use as dependency to lambda1, lambda2, etc.
-    pub fn node(&self) -> Node {
-        self.impl_.node()
+    pub fn to_dep(&self) -> Dep {
+        Dep::new(self.impl_)
     }
 
     pub fn snapshot<B:Clone+'static,C:Clone+'static,FN:IsLambda2<A,B,C>+'static>(&self, cb: &Cell<B>, f: FN) -> Stream<C> {

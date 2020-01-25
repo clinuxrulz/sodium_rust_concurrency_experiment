@@ -65,12 +65,10 @@ impl<A:'static> Stream<A> {
                 let s = s.clone();
                 let node = Node::new(
                     sodium_ctx,
-                    move || {
-                        s.nop();
-                    },
+                    move || {},
                     Vec::new()
                 );
-                node.add_update_dependencies(vec![node.clone()]);
+                node.add_keep_alive(s.clone());
                 node
             }
         )
@@ -92,7 +90,7 @@ impl<A:'static> Stream<A> {
                     },
                     Vec::new()
                 );
-                node.add_update_dependencies(vec![node.clone()]);
+                node.add_keep_alive(s.clone());
                 node
             }
         )

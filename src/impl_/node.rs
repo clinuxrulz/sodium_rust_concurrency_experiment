@@ -1,4 +1,5 @@
 use crate::impl_::sodium_ctx::SodiumCtx;
+use crate::impl_::dep::Dep;
 
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
@@ -27,20 +28,15 @@ pub struct NodeData {
     pub visited: bool,
     pub changed: bool,
     pub update: Box<dyn FnMut()>,
-    pub update_dependencies: Vec<WeakNode>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>,
-    pub keep_alive: Vec<Node>,
+    pub keep_alive: Vec<Dep>,
     pub sodium_ctx: SodiumCtx
 }
 
 impl Trace for NodeData {
     fn trace(&self, tracer: &mut Tracer) {
         for node in &self.dependencies {
-            node.trace(tracer);
-        }
-        for node in &self.update_dependencies {
-            let node = node.upgrade().unwrap();
             node.trace(tracer);
         }
         for node in &self.keep_alive {
@@ -85,7 +81,6 @@ impl Node {
                             visited: false,
                             changed: false,
                             update: Box::new(update),
-                            update_dependencies: Vec::new(),
                             dependencies: dependencies.clone(),
                             dependents: Vec::new(),
                             keep_alive: Vec::new(),
@@ -108,14 +103,6 @@ impl Node {
             data: Cc::downgrade(&this.data),
             sodium_ctx: this.sodium_ctx.clone()
         }
-    }
-
-    pub fn add_update_dependencies(&self, update_dependencies: Vec<Node>) {
-        self.with_data(move |data: &mut NodeData| {
-            for dep in update_dependencies {
-                data.update_dependencies.push(Node::downgrade(&dep));
-            }
-        });
     }
 
     pub fn add_dependency(&self, dependency: Node) {
@@ -153,9 +140,9 @@ impl Node {
         });
     }
 
-    pub fn add_keep_alive(&self, node: &Node) {
+    pub fn add_keep_alive<X:Trace+'static>(&self, dep: Dep) {
         self.with_data(|data: &mut NodeData| {
-            data.keep_alive.push(node.clone());
+            data.keep_alive.push(dep);
         });
     }
 

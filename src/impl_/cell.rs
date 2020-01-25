@@ -1,3 +1,4 @@
+use crate::impl_::dep::Dep;
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
@@ -120,7 +121,8 @@ impl<A:'static> Cell<A> {
                 },
                 vec![stream.node()]
             );
-            node.add_update_dependencies(vec![node.clone()]);
+            node.add_keep_alive(Dep::new(c.clone()));
+            node.add_keep_alive(Dep::new(stream.clone()));
         }
         c.with_data(|data: &mut CellData<A>| data.node = node);
         c

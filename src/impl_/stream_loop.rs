@@ -1,3 +1,4 @@
+use crate::impl_::dep::Dep;
 use crate::impl_::node::NodeData;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::stream::Stream;
@@ -55,13 +56,15 @@ impl<A:Clone+'static> StreamLoop<A> {
             data.looped = true;
             let node = data.stream.node();
             node.add_dependency(s.node());
-            let s = Stream::downgrade(&s);
-            node.add_update_dependencies(vec![node.clone()]);
-            let s_out = data.stream.clone();
+            let s_ = Stream::downgrade(&s);
+            let s_out = Stream::downgrade(&data.stream);
+            node.add_keep_alive(Dep::new(s.clone()));
+            node.add_keep_alive(Dep::new(data.stream.clone()));
             node.with_data(|data: &mut NodeData| {
                 data.update = Box::new(move || {
-                    let s = s.upgrade().unwrap();
-                    s.with_firing_op(|firing_op: &mut Option<A>| {
+                    let s_ = s_.upgrade().unwrap();
+                    let s_out = s_out.upgrade().unwrap();
+                    s_.with_firing_op(|firing_op: &mut Option<A>| {
                         if let Some(ref firing) = firing_op {
                             s_out._send(firing.clone());
                         }

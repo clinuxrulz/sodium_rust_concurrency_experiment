@@ -4,7 +4,7 @@ use crate::impl_::stream::WeakStream;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
 
-pub struct StreamSink<A> {
+pub struct StreamSink<A:'static> {
     stream: Stream<A>,
     sodium_ctx: SodiumCtx
 }

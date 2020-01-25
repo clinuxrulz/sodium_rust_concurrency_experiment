@@ -2,7 +2,7 @@ use crate::impl_::cell::Cell;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::stream_sink::StreamSink;
 
-pub struct CellSink<A> {
+pub struct CellSink<A:'static> {
     cell: Cell<A>,
     stream_sink: StreamSink<A>
 }

@@ -2,16 +2,28 @@ use crate::impl_::node::NodeData;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::stream::Stream;
 
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::cell::RefCell;
+use bacon_rajan_cc::{Cc, Trace, Tracer};
 
-pub struct StreamLoop<A> {
-    pub data: Arc<Mutex<StreamLoopData<A>>>
+pub struct StreamLoop<A:'static> {
+    pub data: Cc<RefCell<StreamLoopData<A>>>
+}
+
+impl<A> Trace for StreamLoop<A> {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        tracer(&self.data);
+    }
 }
 
 pub struct StreamLoopData<A:'static> {
     pub stream: Stream<A>,
     pub looped: bool
+}
+
+impl<A> Trace for StreamLoopData<A> {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        self.stream.trace(tracer);
+    }
 }
 
 impl<A> Clone for StreamLoop<A> {
@@ -24,7 +36,7 @@ impl<A:Clone+'static> StreamLoop<A> {
 
     pub fn new(sodium_ctx: &SodiumCtx) -> StreamLoop<A> {
         StreamLoop {
-            data: Arc::new(Mutex::new(StreamLoopData {
+            data: Cc::new(RefCell::new(StreamLoopData {
                 stream: Stream::new(sodium_ctx),
                 looped: false
             }))
@@ -60,8 +72,8 @@ impl<A:Clone+'static> StreamLoop<A> {
     }
 
     pub fn with_data<R,K:FnOnce(&mut StreamLoopData<A>)->R>(&self, k: K) -> R {
-        let mut l = self.data.lock();
-        let data: &mut StreamLoopData<A> = l.as_mut().unwrap();
+        let mut l = self.data.borrow_mut();
+        let data: &mut StreamLoopData<A> = &mut l;
         k(data)
     }
 }

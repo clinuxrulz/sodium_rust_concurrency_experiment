@@ -39,6 +39,10 @@ impl Trace for NodeData {
         for node in &self.dependencies {
             node.trace(tracer);
         }
+        for node in &self.update_dependencies {
+            let node = node.upgrade().unwrap();
+            node.trace(tracer);
+        }
         for node in &self.keep_alive {
             node.trace(tracer);
         }

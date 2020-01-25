@@ -64,10 +64,6 @@ impl Drop for Node {
 impl Drop for NodeData {
     fn drop(&mut self) {
         self.sodium_ctx.dec_node_count();
-        for dependency in &mut self.dependencies {
-            let mut dep: RefMut<NodeData> = dependency.data.borrow_mut();
-            dep.dependents.retain(|node: &WeakNode| node.data.upgrade().is_some());
-        }
     }
 }
 

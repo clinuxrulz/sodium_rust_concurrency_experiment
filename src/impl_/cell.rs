@@ -42,7 +42,7 @@ pub struct CellData<A> {
     node: Node
 }
 
-impl<A:Send+'static> Cell<A> {
+impl<A:'static> Cell<A> {
     pub fn new(sodium_ctx: &SodiumCtx, value: A) -> Cell<A> where A: Clone {
         Cell {
             data: Arc::new(Mutex::new(CellData {

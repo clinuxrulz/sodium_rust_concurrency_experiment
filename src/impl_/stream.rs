@@ -12,11 +12,16 @@ use crate::impl_::lambda::{lambda1, lambda1_deps, lambda2_deps};
 
 use std::cell::RefCell;
 use std::mem;
-use bacon_rajan_cc::Cc;
-use bacon_rajan_cc::Weak;
+use bacon_rajan_cc::{Cc, Trace, Tracer, Weak};
 
-pub struct Stream<A> {
+pub struct Stream<A:'static> {
     pub data: Cc<RefCell<StreamData<A>>>
+}
+
+impl<A> Trace for Stream<A> {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        tracer(&self.data);
+    }
 }
 
 pub struct WeakStream<A> {
@@ -43,10 +48,16 @@ pub struct StreamData<A> {
     pub firing_op: Option<A>,
     pub node: Node,
     pub sodium_ctx: SodiumCtx,
-    pub coalescer_op: Option<Box<dyn FnMut(&A,&A)->A+Send>>
+    pub coalescer_op: Option<Box<dyn FnMut(&A,&A)->A>>
 }
 
-impl<A:Send+'static> Stream<A> {
+impl<A> Trace for StreamData<A> {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        self.node.trace(tracer);
+    }
+}
+
+impl<A:'static> Stream<A> {
     pub fn new(sodium_ctx: &SodiumCtx) -> Stream<A> {
         Stream::_new(
             sodium_ctx,
@@ -68,20 +79,28 @@ impl<A:Send+'static> Stream<A> {
     // for purpose of capturing stream in lambda
     pub fn nop(&self) {}
 
-    pub fn _new_with_coalescer<COALESCER:FnMut(&A,&A)->A+Send+'static>(sodium_ctx: &SodiumCtx, coalescer: COALESCER) -> Stream<A> {
-        Stream {
-            data: Arc::new(Mutex::new(StreamData {
-                firing_op: None,
-                node: sodium_ctx.null_node(),
-                sodium_ctx: sodium_ctx.clone(),
-                coalescer_op: Some(Box::new(coalescer))
-            })),
-        }
+    pub fn _new_with_coalescer<COALESCER:FnMut(&A,&A)->A+'static>(sodium_ctx: &SodiumCtx, coalescer: COALESCER) -> Stream<A> {
+        Stream::_new(
+            sodium_ctx,
+            |s: &Stream<A>| {
+                s.with_data(|data: &mut StreamData<A>| data.coalescer_op = Some(Box::new(coalescer)));
+                let s = s.clone();
+                let node = Node::new(
+                    sodium_ctx,
+                    move || {
+                        s.nop();
+                    },
+                    Vec::new()
+                );
+                node.add_update_dependencies(vec![node.clone()]);
+                node
+            }
+        )
     }
 
     pub fn _new<MkNode:FnOnce(&Stream<A>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MkNode) -> Stream<A> {
         let s = Stream {
-            data: Arc::new(Mutex::new(StreamData {
+            data: Cc::new(RefCell::new(StreamData {
                 firing_op: None,
                 node: sodium_ctx.null_node(),
                 sodium_ctx: sodium_ctx.clone(),
@@ -90,7 +109,7 @@ impl<A:Send+'static> Stream<A> {
         };
         let node = mk_node(&s);
         s.with_data(|data: &mut StreamData<A>| data.node = node.clone());
-        let mut update: Box<dyn FnMut()+Send> = Box::new(|| {});
+        let mut update: Box<dyn FnMut()> = Box::new(|| {});
         node.with_data(|data: &mut NodeData| {
             mem::swap(&mut update, &mut data.update);
         });
@@ -131,7 +150,7 @@ impl<A:Send+'static> Stream<A> {
         self.with_data(|data: &mut StreamData<A>| data.sodium_ctx.clone())
     }
 
-    pub fn snapshot<B:Send+Clone+'static,C:Send+'static,FN:IsLambda2<A,B,C>+Send+'static>(&self, cb: &Cell<B>, mut f: FN) -> Stream<C> {
+    pub fn snapshot<B:Clone+'static,C:'static,FN:IsLambda2<A,B,C>+'static>(&self, cb: &Cell<B>, mut f: FN) -> Stream<C> {
         let cb = cb.clone();
         let cb_node = cb.node();
         let mut f_deps = lambda2_deps(&f);
@@ -139,11 +158,11 @@ impl<A:Send+'static> Stream<A> {
         self.map(lambda1(move |a: &A| f.call(a, &cb.sample()), f_deps))
     }
 
-    pub fn snapshot1<B:Send+Clone+'static>(&self, cb: &Cell<B>) -> Stream<B> {
+    pub fn snapshot1<B:Clone+'static>(&self, cb: &Cell<B>) -> Stream<B> {
         self.snapshot(cb, |_a: &A, b: &B| b.clone())
     }
 
-    pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, mut f: FN) -> Stream<B> {
+    pub fn map<B:'static,FN:IsLambda1<A,B>+'static>(&self, mut f: FN) -> Stream<B> {
         let self_ = Stream::downgrade(self);
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
@@ -172,7 +191,7 @@ impl<A:Send+'static> Stream<A> {
         )
     }
 
-    pub fn filter<PRED:IsLambda1<A,bool>+Send+'static>(&self, mut pred: PRED) -> Stream<A> where A: Clone {
+    pub fn filter<PRED:IsLambda1<A,bool>+'static>(&self, mut pred: PRED) -> Stream<A> where A: Clone {
         let self_ = Stream::downgrade(self);
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
@@ -204,7 +223,7 @@ impl<A:Send+'static> Stream<A> {
         self.merge(s2, |lhs:&A, _rhs:&A| lhs.clone())
     }
 
-    pub fn merge<FN:IsLambda2<A,A,A>+Send+'static>(&self, s2: &Stream<A>, mut f: FN) -> Stream<A> where A: Clone {
+    pub fn merge<FN:IsLambda2<A,A,A>+'static>(&self, s2: &Stream<A>, mut f: FN) -> Stream<A> where A: Clone {
         let _self = self.clone();
         let s2 = s2.clone();
         let sodium_ctx = self.sodium_ctx().clone();
@@ -264,9 +283,9 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn collect_lazy<B,S,F>(&self, init_state: Lazy<S>, f: F) -> Stream<B>
-        where B: Send + Clone + 'static,
-              S: Send + Clone + 'static,
-              F: IsLambda2<A,S,(B,S)> + Send + 'static
+        where B: Clone + 'static,
+              S: Clone + 'static,
+              F: IsLambda2<A,S,(B,S)> + 'static
     {
         let sodium_ctx = self.sodium_ctx();
         sodium_ctx.transaction(|| {
@@ -282,8 +301,8 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn accum_lazy<S,F>(&self, init_state: Lazy<S>, f: F) -> Cell<S>
-        where S: Send + Clone + 'static,
-              F: IsLambda2<A,S,S> + Send + 'static
+        where S: Clone + 'static,
+              F: IsLambda2<A,S,S> + 'static
     {
         let sodium_ctx = self.sodium_ctx();
         let sodium_ctx = &sodium_ctx;
@@ -350,7 +369,7 @@ impl<A:Send+'static> Stream<A> {
         )
     }
 
-    pub fn _listen<K:IsLambda1<A,()>+Send+'static>(&self, mut k: K, weak: bool) -> Listener {
+    pub fn _listen<K:IsLambda1<A,()>+'static>(&self, mut k: K, weak: bool) -> Listener {
         let self_ = Stream::downgrade(self);
         let node =
             Node::new(
@@ -370,17 +389,17 @@ impl<A:Send+'static> Stream<A> {
         Listener::new(&self.sodium_ctx(), weak, node)
     }
 
-    pub fn listen_weak<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
+    pub fn listen_weak<K:IsLambda1<A,()>+'static>(&self, k: K) -> Listener {
         self._listen(k, true)
     }
 
-    pub fn listen<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
+    pub fn listen<K:IsLambda1<A,()>+'static>(&self, k: K) -> Listener {
         self._listen(k, false)
     }
 
     pub fn with_data<R,K:FnOnce(&mut StreamData<A>)->R>(&self, k: K) -> R {
-        let mut l = self.data.lock();
-        let data: &mut StreamData<A> = l.as_mut().unwrap();
+        let l = self.data.borrow_mut();
+        let data: &mut StreamData<A> = &mut l;
         k(data)
     }
 
@@ -421,7 +440,7 @@ impl<A:Send+'static> Stream<A> {
 
     pub fn downgrade(this: &Self) -> WeakStream<A> {
         WeakStream {
-            data: Arc::downgrade(&this.data)
+            data: Cc::downgrade(&this.data)
         }
     }
 }

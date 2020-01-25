@@ -14,11 +14,11 @@ impl<A> Clone for Lazy<A> {
 }
 
 pub enum LazyData<A> {
-    Thunk(Box<dyn FnMut()->A+Send>),
+    Thunk(Box<dyn FnMut()->A>),
     Value(A)
 }
 
-impl<A:Send+Clone+'static> Lazy<A> {
+impl<A:Clone+'static> Lazy<A> {
 
     pub fn new<THUNK:FnMut()->A+Send+'static>(thunk: THUNK) -> Lazy<A> {
         Lazy {

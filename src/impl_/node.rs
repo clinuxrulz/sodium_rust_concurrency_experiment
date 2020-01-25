@@ -26,7 +26,7 @@ pub struct WeakNode {
 pub struct NodeData {
     pub visited: bool,
     pub changed: bool,
-    pub update: Box<dyn FnMut()+Send>,
+    pub update: Box<dyn FnMut()>,
     pub update_dependencies: Vec<WeakNode>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>,
@@ -72,7 +72,7 @@ impl Drop for NodeData {
 }
 
 impl Node {
-    pub fn new<UPDATE:FnMut()+Send+'static>(sodium_ctx: &SodiumCtx, update: UPDATE, dependencies: Vec<Node>) -> Self {
+    pub fn new<UPDATE:FnMut()+'static>(sodium_ctx: &SodiumCtx, update: UPDATE, dependencies: Vec<Node>) -> Self {
         let result =
             Node {
                 data:

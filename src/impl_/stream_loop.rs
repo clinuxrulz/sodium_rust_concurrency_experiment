@@ -9,7 +9,7 @@ pub struct StreamLoop<A> {
     pub data: Arc<Mutex<StreamLoopData<A>>>
 }
 
-pub struct StreamLoopData<A> {
+pub struct StreamLoopData<A:'static> {
     pub stream: Stream<A>,
     pub looped: bool
 }
@@ -20,7 +20,7 @@ impl<A> Clone for StreamLoop<A> {
     }
 }
 
-impl<A:Clone+Send+'static> StreamLoop<A> {
+impl<A:Clone+'static> StreamLoop<A> {
 
     pub fn new(sodium_ctx: &SodiumCtx) -> StreamLoop<A> {
         StreamLoop {

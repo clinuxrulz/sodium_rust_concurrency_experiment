@@ -1,13 +1,12 @@
 use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
-use crate::impl_::node::NodeGcData;
 use crate::impl_::node::WeakNode;
 
 use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::thread;
+use bacon_rajan_cc::{collect_cycles};
 
 #[derive(Clone)]
 pub struct SodiumCtx {
@@ -22,8 +21,8 @@ pub struct SodiumCtxData {
     pub changed_nodes: Vec<Node>,
     pub visited_nodes: Vec<Node>,
     pub transaction_depth: u32,
-    pub pre_post: Vec<Box<dyn FnMut()+Send>>,
-    pub post: Vec<Box<dyn FnMut()+Send>>,
+    pub pre_post: Vec<Box<dyn FnMut()>>,
+    pub post: Vec<Box<dyn FnMut()>>,
     pub keep_alive: Vec<Listener>,
     pub collecting_cycles: bool,
     pub allow_add_roots: bool,
@@ -35,15 +34,15 @@ pub struct ThreadedMode {
 }
 
 pub struct ThreadSpawner {
-    pub spawn_fn: Box<dyn Fn(Box<dyn FnOnce()+Send>)->ThreadJoiner<()>+Send+Sync>
+    pub spawn_fn: Box<dyn Fn(Box<dyn FnOnce()>)->ThreadJoiner<()>+Sync>
 }
 
 pub struct ThreadJoiner<R> {
-    pub join_fn: Box<dyn FnOnce()->R+Send>
+    pub join_fn: Box<dyn FnOnce()->R>
 }
 
 impl ThreadedMode {
-    pub fn spawn<R:Send+'static,F:FnOnce()->R+Send+'static>(&self, f: F) -> ThreadJoiner<R> {
+    pub fn spawn<R:'static,F:FnOnce()->R+'static>(&self, f: F) -> ThreadJoiner<R> {
         let r: Arc<Mutex<Option<R>>> = Arc::new(Mutex::new(None));
         let thread_joiner;
         {
@@ -86,22 +85,6 @@ pub fn single_threaded_mode() -> ThreadedMode {
         }
     }
 }
-
-pub fn simple_threaded_mode() -> ThreadedMode {
-    ThreadedMode {
-        spawner: ThreadSpawner {
-            spawn_fn: Box::new(|callback| {
-                let h = thread::spawn(callback);
-                ThreadJoiner {
-                    join_fn: Box::new(move || { h.join().unwrap(); })
-                }
-            })
-        }
-    }
-}
-
-// TODO:
-//pub fn thread_pool_threaded_mode(num_threads: usize) -> ThreadedMode
 
 impl SodiumCtx {
     pub fn new() -> SodiumCtx {
@@ -177,13 +160,13 @@ impl SodiumCtx {
         });
     }
 
-    pub fn pre_post<K:FnMut()+Send+'static>(&self, k: K) {
+    pub fn pre_post<K:FnMut()+'static>(&self, k: K) {
         self.with_data(|data: &mut SodiumCtxData| {
             data.pre_post.push(Box::new(k));
         });
     }
     
-    pub fn post<K:FnMut()+Send+'static>(&self, k:K) {
+    pub fn post<K:FnMut()+'static>(&self, k:K) {
         self.with_data(|data: &mut SodiumCtxData| {
             data.post.push(Box::new(k));
         });
@@ -255,7 +238,7 @@ impl SodiumCtx {
         // pre_post
         let pre_post =
             self.with_data(|data: &mut SodiumCtxData| {
-                let mut pre_post: Vec<Box<dyn FnMut()+Send>> = Vec::new();
+                let mut pre_post: Vec<Box<dyn FnMut()>> = Vec::new();
                 mem::swap(&mut pre_post, &mut data.pre_post);
                 return pre_post;
             });
@@ -265,7 +248,7 @@ impl SodiumCtx {
         // post
         let post =
             self.with_data(|data: &mut SodiumCtxData| {
-                let mut post: Vec<Box<dyn FnMut()+Send>> = Vec::new();
+                let mut post: Vec<Box<dyn FnMut()>> = Vec::new();
                 mem::swap(&mut post, &mut data.post);
                 return post;
             });
@@ -314,7 +297,7 @@ impl SodiumCtx {
                 .any(|node: &Node| { node.with_data(|data: &mut NodeData| data.changed) });
         // if dependencies changed, then execute update on current node
         if any_changed {
-            let mut update: Box<dyn FnMut()+Send> = Box::new(|| {});
+            let mut update: Box<dyn FnMut()> = Box::new(|| {});
             node.with_data(|data: &mut NodeData| {
                 mem::swap(&mut update, &mut data.update);
             });
@@ -341,123 +324,6 @@ impl SodiumCtx {
     }
 
     pub fn collect_cycles(&self) {
-        let bail =
-            self.with_data(|data: &mut SodiumCtxData| {
-                if data.collecting_cycles {
-                    return true;
-                }
-                data.collecting_cycles = true;
-                data.allow_add_roots = false;
-                return false;
-            });
-        if bail {
-            return;
-        }
-        loop {
-            let mut gc_roots: Vec<WeakNode> = Vec::new();
-            self.with_data(|data: &mut SodiumCtxData| {
-                mem::swap(&mut gc_roots, &mut data.gc_roots);
-            });
-            if gc_roots.is_empty() {
-                break;
-            }
-            for gc_root in gc_roots {
-                self.gc_process_root(gc_root);
-            }
-        }
-        self.with_data(|data: &mut SodiumCtxData| {
-            data.collecting_cycles = false;
-            data.allow_add_roots = true;
-        });
-    }
-
-    pub fn gc_process_root(&self, node: WeakNode) {
-        let node_op = node.upgrade();
-        if node_op.is_none() {
-            return;
-        }
-        let node = node_op.unwrap();
-        let ref_count_adj = self.gc_calc_ref_count_adj(&node);
-        // "+ 1" for current reference in this method
-        let ref_count = Arc::strong_count(&node.data);
-        if ref_count == ref_count_adj + 1 {
-            // println!("ref_count {}, ref_count_adj {}\n{:?}", ref_count, ref_count_adj, node);
-            self.with_data(|data: &mut SodiumCtxData| {
-                data.allow_add_roots = true;
-            });
-            self.gc_free_node(&node);
-            self.with_data(|data: &mut SodiumCtxData| {
-                data.allow_add_roots = false;
-            });
-        }
-    }
-
-    pub fn gc_calc_ref_count_adj(&self, node: &Node) -> usize {
-        let next_nodes = node.with_data(|data: &mut NodeData| {
-            let mut next_nodes = data.dependencies.clone();
-            for dep in &data.update_dependencies {
-                if let Some(dep) = dep.upgrade() {
-                    next_nodes.push(dep);
-                }
-            }
-            for dep in &data.keep_alive {
-                next_nodes.push(dep.clone());
-            }
-            next_nodes
-        });
-        let mut ref_count_adj = 0;
-        for at_node in next_nodes {
-            self.gc_calc_ref_count_adj2(node, &at_node, &mut ref_count_adj);
-        }
-        ref_count_adj
-    }
-
-    pub fn gc_calc_ref_count_adj2(&self, node: &Node, at_node: &Node, ref_count_adj: &mut usize) {
-        if Arc::ptr_eq(&node.data, &at_node.data) {
-            *ref_count_adj = *ref_count_adj + 1;
-            return;
-        }
-        let next_nodes: Vec<Node>;
-        let bail =
-            at_node.with_data(|data: &mut NodeData| {
-                if data.visited {
-                    return true;
-                }
-                data.visited = true;
-                return false;
-            });
-        if bail {
-            return;
-        }
-        next_nodes = at_node.with_data(|data: &mut NodeData| {
-            let mut next_nodes = data.dependencies.clone();
-            for dep in &data.update_dependencies {
-                if let Some(dep) = dep.upgrade() {
-                    next_nodes.push(dep);
-                }
-            }
-            for dep in &data.keep_alive {
-                next_nodes.push(dep.clone());
-            }
-            next_nodes
-        });
-        for next_node in next_nodes {
-            self.gc_calc_ref_count_adj2(node, &next_node, ref_count_adj);
-        }
-        at_node.with_data(|data: &mut NodeData| {
-            data.visited = false;
-        });
-    }
-
-    pub fn gc_free_node(&self, node: &Node) {
-        let dependencies =
-            node.with_data(|data: &mut NodeData| {
-                data.update = Box::new(|| {});
-                data.keep_alive.clear();
-                data.dependencies.clone()
-            });
-        for dependency in dependencies {
-            node.remove_dependency(&dependency);
-        }
+        collect_cycles();
     }
 }

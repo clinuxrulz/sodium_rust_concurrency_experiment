@@ -9,7 +9,7 @@ use crate::Lazy;
 use crate::listener::Listener;
 use crate::sodium_ctx::SodiumCtx;
 
-pub struct Stream<A> {
+pub struct Stream<A:'static> {
     pub impl_: StreamImpl<A>
 }
 

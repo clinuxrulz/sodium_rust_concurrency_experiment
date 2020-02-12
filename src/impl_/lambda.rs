@@ -1,4 +1,4 @@
-use bacon_rajan_cc::{Trace, Tracer};
+use crate::impl_::gc::{Trace, Tracer};
 use crate::impl_::dep::Dep;
 
 pub struct Lambda<FN> {

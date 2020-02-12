@@ -1,4 +1,5 @@
 use crate::impl_::dep::Dep;
+use crate::impl_::gc::{Gc, GcCell, GcWeak, Trace, Tracer};
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
@@ -18,10 +19,9 @@ use crate::impl_::lambda::{lambda1, lambda2, lambda3, lambda2_deps, lambda3_deps
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::mem;
-use bacon_rajan_cc::{Cc, Trace, Tracer, Weak};
 
 pub struct Cell<A:'static> {
-    data: Cc<RefCell<CellData<A>>>
+    data: Gc<GcCell<CellData<A>>>
 }
 
 impl<A> Trace for Cell<A> {
@@ -31,7 +31,7 @@ impl<A> Trace for Cell<A> {
 }
 
 pub struct WeakCell<A:'static> {
-    data: Weak<RefCell<CellData<A>>>
+    data: GcWeak<GcCell<CellData<A>>>
 }
 
 impl<A> Clone for Cell<A> {
@@ -59,7 +59,7 @@ impl<A> Trace for CellData<A> {
 impl<A:'static> Cell<A> {
     pub fn new(sodium_ctx: &SodiumCtx, value: A) -> Cell<A> where A: Clone {
         Cell {
-            data: Cc::new(RefCell::new(CellData {
+            data: sodium_ctx.gc_ctx().new_gc(GcCell::new(CellData {
                 value: Lazy::of_value(value),
                 next_value_op: None,
                 stream: Stream::new(sodium_ctx),
@@ -80,7 +80,7 @@ impl<A:'static> Cell<A> {
                 }
             });
         let c = Cell {
-            data: Cc::new(RefCell::new(CellData {
+            data: sodium_ctx.gc_ctx().new_gc(GcCell::new(CellData {
                 value: init_value,
                 next_value_op: None,
                 stream: stream.clone(),
@@ -316,11 +316,11 @@ impl<A:'static> Cell<A> {
         Stream::_new(
             &sodium_ctx,
             |sa: &Stream<A>| {
-                let inner_s: Cc<RefCell<Stream<A>>> = Cc::new(RefCell::new(csa.sample()));
+                let inner_s: Gc<GcCell<Stream<A>>> = sodium_ctx.gc_ctx().new_gc(GcCell::new(csa.sample()));
                 let sa = sa.clone();
                 let node1: Node;
                 {
-                    let inner_s = Cc::downgrade(&inner_s);
+                    let inner_s = Gc::downgrade(&inner_s);
                     let sa = Stream::downgrade(&sa);
                     node1 = Node::new(
                         &sodium_ctx,
@@ -342,7 +342,7 @@ impl<A:'static> Cell<A> {
                 node1.add_keep_alive(Dep::new(sa));
                 let node2: Node;
                 {
-                    let inner_s = Cc::downgrade(&inner_s);
+                    let inner_s = Gc::downgrade(&inner_s);
                     let node1 = Node::downgrade(&node1);
                     let csa2 = csa.clone();
                     let sodium_ctx = sodium_ctx.clone();
@@ -397,7 +397,7 @@ impl<A:'static> Cell<A> {
                     vec![cca.updates().node()]
                 );
                 let init_inner_s = cca.sample().updates();
-                let last_inner_s = Cc::new(RefCell::new(init_inner_s.clone()));
+                let last_inner_s = sodium_ctx.gc_ctx().new_gc(GcCell::new(init_inner_s.clone()));
                 let node2 = Node::new(
                     &sodium_ctx,
                     || {},
@@ -410,7 +410,7 @@ impl<A:'static> Cell<A> {
                     let node2 = Node::downgrade(&node2);
                     let cca = Cell::downgrade(&cca);
                     let sa = Stream::downgrade(sa);
-                    let last_inner_s = Cc::downgrade(&last_inner_s);
+                    let last_inner_s = Gc::downgrade(&last_inner_s);
                     node1_update = move || {
                         let cca = cca.upgrade().unwrap();
                         let node1 = node1.upgrade().unwrap();
@@ -450,7 +450,7 @@ impl<A:'static> Cell<A> {
                 ]);
                 node1.with_data(|data: &mut NodeData| data.update = Box::new(node1_update));
                 {
-                    let last_inner_s = Cc::downgrade(&last_inner_s);
+                    let last_inner_s = Gc::downgrade(&last_inner_s);
                     let sa = Stream::downgrade(sa);
                     let node2_update = move || {
                         let last_inner_s = last_inner_s.upgrade().unwrap();
@@ -491,7 +491,7 @@ impl<A:'static> Cell<A> {
 
     pub fn downgrade(this: &Self) -> WeakCell<A> {
         WeakCell {
-            data: Cc::downgrade(&this.data)
+            data: Gc::downgrade(&this.data)
         }
     }
 }

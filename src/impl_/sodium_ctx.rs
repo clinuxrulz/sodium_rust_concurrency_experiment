@@ -112,6 +112,10 @@ impl SodiumCtx {
         }
     }
 
+    pub fn gc_ctx(&self) -> GcCtx {
+        self.gc_ctx.clone()
+    }
+
     pub fn null_node(&self) -> Node {
         self.with_data(|data: &mut SodiumCtxData| {
             if let Some(ref null_node) = data.null_node_op {

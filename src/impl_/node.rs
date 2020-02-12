@@ -1,14 +1,13 @@
-use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::dep::Dep;
+use crate::impl_::gc::{Gc, GcCell, GcCellRef, GcCellRefMut, GcWeak, Trace, Tracer};
+use crate::impl_::sodium_ctx::SodiumCtx;
 
-use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
-use bacon_rajan_cc::{Cc, Trace, Tracer, Weak};
 
 pub struct Node {
-    pub data: Cc<RefCell<NodeData>>,
+    pub data: Gc<GcCell<NodeData>>,
     pub sodium_ctx: SodiumCtx
 }
 
@@ -20,7 +19,7 @@ impl Trace for Node {
 
 #[derive(Clone)]
 pub struct WeakNode {
-    pub data: Weak<RefCell<NodeData>>,
+    pub data: GcWeak<GcCell<NodeData>>,
     pub sodium_ctx: SodiumCtx
 }
 
@@ -72,7 +71,7 @@ impl Node {
         let result =
             Node {
                 data:
-                    Cc::new(RefCell::new(
+                    sodium_ctx.gc_ctx().new_gc(GcCell::new(
                         NodeData {
                             visited: false,
                             changed: false,
@@ -86,7 +85,7 @@ impl Node {
                 sodium_ctx: sodium_ctx.clone()
             };
         for dependency in dependencies {
-            let mut dependency2: RefMut<NodeData> = dependency.data.borrow_mut();
+            let mut dependency2: GcCellRefMut<NodeData> = dependency.data.borrow_mut();
             dependency2.dependents.push(Node::downgrade(&result));
         }
         sodium_ctx.inc_node_ref_count();
@@ -96,7 +95,7 @@ impl Node {
 
     pub fn downgrade(this: &Self) -> WeakNode {
         WeakNode {
-            data: Cc::downgrade(&this.data),
+            data: Gc::downgrade(&this.data),
             sodium_ctx: this.sodium_ctx.clone()
         }
     }
@@ -151,7 +150,7 @@ impl Node {
     }
 
     pub fn with_data<R,K:FnOnce(&mut NodeData)->R>(&self, k: K) -> R {
-        let mut l: RefMut<NodeData> = self.data.borrow_mut();
+        let mut l: GcCellRefMut<NodeData> = self.data.borrow_mut();
         let data: &mut NodeData = &mut l;
         k(data)
     }
@@ -164,7 +163,7 @@ impl fmt::Debug for Node {
             let mut next_id: usize = 1;
             let mut node_id_map: HashMap<*const NodeData,usize> = HashMap::new();
             node_to_id = move |node: &Node| {
-                let l: Ref<NodeData> = node.data.borrow();
+                let l: GcCellRef<NodeData> = node.data.borrow();
                 let node_data: &NodeData = &l;
                 let node_data: *const NodeData = node_data;
                 let existing_op = node_id_map.get(&node_data).map(|x| x.clone());
@@ -189,7 +188,7 @@ impl fmt::Debug for Node {
                 }
             }
             pub fn is_visited(&self, node: &Node) -> bool {
-                let l: Ref<NodeData> = node.data.borrow();
+                let l: GcCellRef<NodeData> = node.data.borrow();
                 let node_data: &NodeData = &l;
                 let node_data: *const NodeData = node_data;
                 return self.visited.contains(&node_data);

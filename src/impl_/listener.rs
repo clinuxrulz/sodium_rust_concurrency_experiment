@@ -1,14 +1,13 @@
+use crate::impl_::gc::{Gc, GcCell, Trace, Tracer};
 use crate::impl_::node::Node;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
 
-use std::cell::RefCell;
 use std::fmt;
-use bacon_rajan_cc::{Cc, Trace, Tracer};
 
 #[derive(Clone)]
 pub struct Listener {
-    pub data: Cc<RefCell<ListenerData>>
+    pub data: Gc<GcCell<ListenerData>>
 }
 
 impl Trace for Listener {
@@ -34,7 +33,7 @@ impl Trace for ListenerData {
 impl Listener {
     pub fn new(sodium_ctx: &SodiumCtx, is_weak: bool, node: Node) -> Listener {
         let listener = Listener {
-            data: Cc::new(RefCell::new(ListenerData {
+            data: sodium_ctx.gc_ctx().new_gc(GcCell::new(ListenerData {
                 sodium_ctx: sodium_ctx.clone(),
                 node_op: Some(node),
                 is_weak

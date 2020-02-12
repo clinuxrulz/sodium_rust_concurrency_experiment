@@ -1,5 +1,3 @@
-extern crate bacon_rajan_cc;
-
 pub mod cell;
 pub mod cell_loop;
 pub mod cell_sink;

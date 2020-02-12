@@ -19,6 +19,8 @@ pub struct GcCtx {
     data: Rc<RefCell<GcCtxData>>
 }
 
+pub type Tracer = &mut dyn FnMut(&GcDep);
+
 impl Clone for GcCtx {
     fn clone(&self) -> Self {
         GcCtx {

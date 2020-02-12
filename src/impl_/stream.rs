@@ -1,5 +1,6 @@
 use crate::impl_::cell::Cell;
 use crate::impl_::dep::Dep;
+use crate::impl_::gc::{Gc, GcDep, GcCell, Trace, Tracer, GcWeak};
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
 use crate::impl_::lazy::Lazy;
@@ -11,22 +12,20 @@ use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 use crate::impl_::lambda::{lambda1, lambda1_deps, lambda2_deps};
 
-use std::cell::RefCell;
 use std::mem;
-use bacon_rajan_cc::{Cc, Trace, Tracer, Weak};
 
 pub struct Stream<A:'static> {
-    pub data: Cc<RefCell<StreamData<A>>>
+    pub data: Gc<GcCell<StreamData<A>>>
 }
 
 impl<A> Trace for Stream<A> {
-    fn trace(&self, tracer: &mut Tracer) {
+    fn trace(&self, tracer: Tracer) {
         tracer(&self.data);
     }
 }
 
 pub struct WeakStream<A> {
-    pub data: Weak<RefCell<StreamData<A>>>
+    pub data: GcWeak<GcCell<StreamData<A>>>
 }
 
 impl<A> Clone for Stream<A> {
@@ -97,7 +96,7 @@ impl<A:'static> Stream<A> {
 
     pub fn _new<MkNode:FnOnce(&Stream<A>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MkNode) -> Stream<A> {
         let s = Stream {
-            data: Cc::new(RefCell::new(StreamData {
+            data: Gc::new(GcCell::new(StreamData {
                 firing_op: None,
                 node: sodium_ctx.null_node(),
                 sodium_ctx: sodium_ctx.clone(),
@@ -435,7 +434,7 @@ impl<A:'static> Stream<A> {
 
     pub fn downgrade(this: &Self) -> WeakStream<A> {
         WeakStream {
-            data: Cc::downgrade(&this.data)
+            data: Gc::downgrade(&this.data)
         }
     }
 }

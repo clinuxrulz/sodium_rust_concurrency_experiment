@@ -1,12 +1,12 @@
 use std::rc::Rc;
-use bacon_rajan_cc::{Trace, Tracer};
+use crate::impl_::gc::{GcDep, Trace};
 
 pub struct Dep {
     pub data: Rc<dyn Trace>
 }
 
 impl Trace for Dep {
-    fn trace(&self, tracer: &mut Tracer) {
+    fn trace(&self, tracer: &mut dyn FnMut(&GcDep)) {
         self.data.trace(tracer);
     }
 }

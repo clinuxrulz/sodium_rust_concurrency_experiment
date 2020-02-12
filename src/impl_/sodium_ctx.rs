@@ -1,3 +1,4 @@
+use crate::impl_::gc::GcCtx;
 use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
@@ -6,14 +7,14 @@ use crate::impl_::node::WeakNode;
 use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
-use bacon_rajan_cc::{collect_cycles};
 
 #[derive(Clone)]
 pub struct SodiumCtx {
     data: Arc<Mutex<SodiumCtxData>>,
     node_count: Arc<Mutex<usize>>,
     node_ref_count: Arc<Mutex<usize>>,
-    threaded_mode: Arc<ThreadedMode>
+    threaded_mode: Arc<ThreadedMode>,
+    gc_ctx: GcCtx
 }
 
 pub struct SodiumCtxData {
@@ -106,7 +107,8 @@ impl SodiumCtx {
                 )),
             node_count: Arc::new(Mutex::new(0)),
             node_ref_count: Arc::new(Mutex::new(0)),
-            threaded_mode: Arc::new(single_threaded_mode())
+            threaded_mode: Arc::new(single_threaded_mode()),
+            gc_ctx: GcCtx::new()
         }
     }
 
@@ -324,6 +326,6 @@ impl SodiumCtx {
     }
 
     pub fn collect_cycles(&self) {
-        collect_cycles();
+        self.gc_ctx.collect_cycles();
     }
 }

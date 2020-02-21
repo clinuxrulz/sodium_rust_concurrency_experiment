@@ -32,7 +32,7 @@ impl<A> Finalize for CellLoopData<A> {
 }
 
 impl<A> Trace for CellLoopData<A> {
-    fn trace(&self, tracer: Tracer) {
+    fn trace(&self, tracer: &mut Tracer) {
         self.stream_loop.trace(tracer);
         self.cell.trace(tracer);
     }

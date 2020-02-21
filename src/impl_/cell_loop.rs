@@ -1,3 +1,4 @@
+use crate::impl_::gc::{Finalize, Gc, GcCell, Trace, Tracer};
 use crate::impl_::stream_loop::StreamLoop;
 use crate::impl_::cell::Cell;
 use crate::impl_::lazy::Lazy;
@@ -6,10 +7,9 @@ use crate::impl_::sodium_ctx::SodiumCtx;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::mem;
-use bacon_rajan_cc::{Cc, Trace, Tracer};
 
 pub struct CellLoop<A:'static> {
-    pub data: Cc<RefCell<CellLoopData<A>>>
+    pub data: Gc<GcCell<CellLoopData<A>>>
 }
 
 impl<A> Clone for CellLoop<A> {
@@ -26,12 +26,18 @@ pub struct CellLoopData<A:'static> {
     pub init_value_op: Rc<RefCell<Option<A>>>
 }
 
+impl<A> Finalize for CellLoopData<A> {
+    fn finalize(&mut self) {
+    }
+}
+
 impl<A> Trace for CellLoopData<A> {
-    fn trace(&self, tracer: &mut Tracer) {
+    fn trace(&self, tracer: Tracer) {
         self.stream_loop.trace(tracer);
         self.cell.trace(tracer);
     }
 }
+
 
 impl<A:Clone+'static> CellLoop<A> {
 
@@ -54,7 +60,7 @@ impl<A:Clone+'static> CellLoop<A> {
         let stream_loop = StreamLoop::new(sodium_ctx);
         let stream = stream_loop.stream();
         CellLoop {
-            data: Cc::new(RefCell::new(CellLoopData {
+            data: sodium_ctx.gc_ctx().new_gc(GcCell::new(CellLoopData {
                 stream_loop: stream_loop,
                 cell: stream.hold_lazy(init_value),
                 init_value_op

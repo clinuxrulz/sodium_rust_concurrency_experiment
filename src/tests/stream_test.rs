@@ -8,7 +8,6 @@ use crate::tests::assert_memory_freed;
 
 use std::sync::Arc;
 use std::sync::Mutex;
-use bacon_rajan_cc::Cc;
 
 #[test]
 fn map() {

@@ -1,10 +1,8 @@
 use crate::impl_::dep::Dep;
-use crate::impl_::gc::{Gc, GcCell, Trace, Tracer};
+use crate::impl_::gc::{Finalize, Gc, GcCell, Trace, Tracer};
 use crate::impl_::node::NodeData;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::stream::Stream;
-
-use std::cell::RefCell;
 
 pub struct StreamLoop<A:'static> {
     pub data: Gc<GcCell<StreamLoopData<A>>>
@@ -12,8 +10,12 @@ pub struct StreamLoop<A:'static> {
 
 impl<A> Trace for StreamLoop<A> {
     fn trace(&self, tracer: &mut Tracer) {
-        tracer(&self.data);
+        self.data.trace(tracer);
     }
+}
+
+impl<A> Finalize for StreamLoop<A> {
+    fn finalize(&mut self) {}
 }
 
 pub struct StreamLoopData<A:'static> {
@@ -27,6 +29,10 @@ impl<A> Trace for StreamLoopData<A> {
     }
 }
 
+impl<A> Finalize for StreamLoopData<A> {
+    fn finalize(&mut self) {}
+}
+
 impl<A> Clone for StreamLoop<A> {
     fn clone(&self) -> Self {
         StreamLoop { data: self.data.clone() }
@@ -37,7 +43,7 @@ impl<A:Clone+'static> StreamLoop<A> {
 
     pub fn new(sodium_ctx: &SodiumCtx) -> StreamLoop<A> {
         StreamLoop {
-            data: Gc::new(GcCell::new(StreamLoopData {
+            data: sodium_ctx.gc_ctx().new_gc(GcCell::new(StreamLoopData {
                 stream: Stream::new(sodium_ctx),
                 looped: false
             }))

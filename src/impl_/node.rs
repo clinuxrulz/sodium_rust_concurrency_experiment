@@ -1,5 +1,5 @@
 use crate::impl_::dep::Dep;
-use crate::impl_::gc::{Gc, GcCell, GcCellRef, GcCellRefMut, GcWeak, Trace, Tracer};
+use crate::impl_::gc::{Finalize, Gc, GcCell, GcCellRef, GcCellRefMut, GcWeak, Trace, Tracer};
 use crate::impl_::sodium_ctx::SodiumCtx;
 
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ pub struct Node {
 
 impl Trace for Node {
     fn trace(&self, tracer: &mut Tracer) {
-        tracer(&self.data);
+        self.data.trace(tracer);
     }
 }
 
@@ -24,6 +24,7 @@ pub struct WeakNode {
 }
 
 pub struct NodeData {
+    pub ptr_str: String,
     pub visited: bool,
     pub changed: bool,
     pub update: Box<dyn FnMut()>,
@@ -42,6 +43,23 @@ impl Trace for NodeData {
             node.trace(tracer);
         }
     }
+}
+
+impl Finalize for NodeData {
+    fn finalize(&mut self) {
+        for dependency in &self.dependencies {
+            dependency.with_data(
+                |data: &mut NodeData|
+                    data.dependents.retain(|dependent: &WeakNode| {
+                        if let Some(dependent2) = dependent.upgrade() {
+                            return format!("{:p}", dependent2.data) != self.ptr_str;
+                        } else {
+                            return false;
+                        }
+                    })
+            );
+        }
+    }    
 }
 
 impl Clone for Node {
@@ -73,6 +91,7 @@ impl Node {
                 data:
                     sodium_ctx.gc_ctx().new_gc(GcCell::new(
                         NodeData {
+                            ptr_str: String::new(),
                             visited: false,
                             changed: false,
                             update: Box::new(update),
@@ -84,6 +103,8 @@ impl Node {
                     )),
                 sodium_ctx: sodium_ctx.clone()
             };
+        let ptr_str: String = format!("{:p}", result.data);
+        result.with_data(move |data: &mut NodeData| data.ptr_str = ptr_str);
         for dependency in dependencies {
             let mut dependency2: GcCellRefMut<NodeData> = dependency.data.borrow_mut();
             dependency2.dependents.push(Node::downgrade(&result));

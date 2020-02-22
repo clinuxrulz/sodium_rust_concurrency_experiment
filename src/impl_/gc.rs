@@ -90,6 +90,12 @@ impl<A: ?Sized> Deref for Gc<A> {
     }
 }
 
+impl<A: ?Sized> std::fmt::Pointer for Gc<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:p}", self.value)
+    }
+}
+
 impl<A: ?Sized> Gc<A> {
     pub fn debug(&self) {
         let node = unsafe { &*self.node };

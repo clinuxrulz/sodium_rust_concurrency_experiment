@@ -1,6 +1,6 @@
 use crate::impl_::cell::Cell;
 use crate::impl_::dep::Dep;
-use crate::impl_::gc::{Gc, GcDep, GcCell, Trace, Tracer, GcWeak};
+use crate::impl_::gc::{Finalize, Gc, GcDep, GcCell, Trace, Tracer, GcWeak};
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
 use crate::impl_::lazy::Lazy;
@@ -19,9 +19,13 @@ pub struct Stream<A:'static> {
 }
 
 impl<A> Trace for Stream<A> {
-    fn trace(&self, tracer: Tracer) {
-        tracer(&self.data);
+    fn trace(&self, tracer: &mut Tracer) {
+        self.data.trace(tracer);
     }
+}
+
+impl<A> Finalize for Stream<A> {
+    fn finalize(&mut self) {}
 }
 
 pub struct WeakStream<A> {
@@ -55,6 +59,10 @@ impl<A> Trace for StreamData<A> {
     fn trace(&self, tracer: &mut Tracer) {
         self.node.trace(tracer);
     }
+}
+
+impl<A> Finalize for StreamData<A> {
+    fn finalize(&mut self) {}
 }
 
 impl<A:'static> Stream<A> {
@@ -96,7 +104,7 @@ impl<A:'static> Stream<A> {
 
     pub fn _new<MkNode:FnOnce(&Stream<A>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MkNode) -> Stream<A> {
         let s = Stream {
-            data: Gc::new(GcCell::new(StreamData {
+            data: sodium_ctx.gc_ctx().new_gc(GcCell::new(StreamData {
                 firing_op: None,
                 node: sodium_ctx.null_node(),
                 sodium_ctx: sodium_ctx.clone(),

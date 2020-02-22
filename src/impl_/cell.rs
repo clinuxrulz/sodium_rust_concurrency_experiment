@@ -1,5 +1,5 @@
 use crate::impl_::dep::Dep;
-use crate::impl_::gc::{Gc, GcCell, GcWeak, Trace, Tracer};
+use crate::impl_::gc::{Finalize, Gc, GcCell, GcWeak, Trace, Tracer};
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
@@ -26,7 +26,7 @@ pub struct Cell<A:'static> {
 
 impl<A> Trace for Cell<A> {
     fn trace(&self, tracer: &mut Tracer) {
-        tracer(&self.data);
+        self.data.trace(tracer);
     }
 }
 
@@ -54,6 +54,10 @@ impl<A> Trace for CellData<A> {
         self.stream.trace(tracer);
         self.node.trace(tracer);
     }
+}
+
+impl<A> Finalize for CellData<A> {
+    fn finalize(&mut self) {}
 }
 
 impl<A:'static> Cell<A> {

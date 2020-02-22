@@ -1,4 +1,4 @@
-use crate::impl_::gc::{Gc, GcCell, Trace, Tracer};
+use crate::impl_::gc::{Finalize, Gc, GcCell, Trace, Tracer};
 use crate::impl_::node::Node;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
@@ -12,7 +12,7 @@ pub struct Listener {
 
 impl Trace for Listener {
     fn trace(&self, tracer: &mut Tracer) {
-        tracer(&self.data);
+        self.data.trace(tracer);
     }
 }
 
@@ -28,6 +28,10 @@ impl Trace for ListenerData {
             node.trace(tracer);
         }
     }
+}
+
+impl Finalize for ListenerData {
+    fn finalize(&mut self) {}
 }
 
 impl Listener {

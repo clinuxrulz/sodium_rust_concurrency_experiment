@@ -27,8 +27,7 @@ pub struct CellLoopData<A:'static> {
 }
 
 impl<A> Finalize for CellLoopData<A> {
-    fn finalize(&mut self) {
-    }
+    fn finalize(&mut self) {}
 }
 
 impl<A> Trace for CellLoopData<A> {

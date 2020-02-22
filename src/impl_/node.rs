@@ -47,6 +47,8 @@ impl Trace for NodeData {
 
 impl Finalize for NodeData {
     fn finalize(&mut self) {
+        // Crashes here if code below uncommented (STATUS_ACCESS_VIOLATION)
+        /*
         for dependency in &self.dependencies {
             dependency.with_data(
                 |data: &mut NodeData|
@@ -58,7 +60,7 @@ impl Finalize for NodeData {
                         }
                     })
             );
-        }
+        }*/
     }    
 }
 

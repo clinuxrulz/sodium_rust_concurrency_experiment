@@ -111,12 +111,12 @@ impl<A: ?Sized> Gc<A> {
         }
     }
 
-    pub fn strong_count(&self) -> i32 {
+    pub fn strong_count(&self) -> u32 {
         let node = unsafe { &*self.node };
         node.strong
     }
 
-    pub fn weak_count(&self) -> i32 {
+    pub fn weak_count(&self) -> u32 {
         let node = unsafe { &*self.node };
         node.weak
     }
@@ -758,8 +758,8 @@ enum Colour {
 
 struct Node {
     desc_op: Option<String>,
-    strong: i32,
-    weak: i32,
+    strong: u32,
+    weak: u32,
     colour: Colour,
     buffered: bool,
     trace: Box<Fn(&mut FnMut(*mut Node))>,

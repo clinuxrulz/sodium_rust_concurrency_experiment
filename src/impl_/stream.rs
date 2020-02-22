@@ -18,6 +18,12 @@ pub struct Stream<A:'static> {
     pub data: Gc<GcCell<StreamData<A>>>
 }
 
+impl<A> Into<GcDep> for Stream<A> {
+    fn into(self) -> GcDep {
+        self.data.to_dep()
+    }
+}
+
 impl<A> Trace for Stream<A> {
     fn trace(&self, tracer: &mut Tracer) {
         self.data.trace(tracer);

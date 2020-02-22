@@ -1,19 +1,18 @@
-use std::rc::Rc;
-use crate::impl_::gc::{GcDep, Trace};
+use crate::impl_::gc::{Finalize, Gc, GcDep, Trace};
 
 pub struct Dep {
-    pub data: Rc<dyn Trace>
+    pub data: GcDep
 }
 
 impl Trace for Dep {
     fn trace(&self, tracer: &mut dyn FnMut(&GcDep)) {
-        self.data.trace(tracer);
+        tracer(&self.data);
     }
 }
 
 impl Dep {
-    pub fn new<X:Trace+'static>(x: X) -> Dep {
-        Dep { data: Rc::new(x) }
+    pub fn new<X:Into<GcDep>>(x: X) -> Dep {
+        Dep { data: x.into() }
     }
 }
 

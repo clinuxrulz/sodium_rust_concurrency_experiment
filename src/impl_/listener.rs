@@ -1,4 +1,4 @@
-use crate::impl_::gc::{Finalize, Gc, GcCell, Trace, Tracer};
+use crate::impl_::gc::{Finalize, Gc, GcCell, GcDep, Trace, Tracer};
 use crate::impl_::node::Node;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
@@ -8,6 +8,12 @@ use std::fmt;
 #[derive(Clone)]
 pub struct Listener {
     pub data: Gc<GcCell<ListenerData>>
+}
+
+impl Into<GcDep> for Listener {
+    fn into(self) -> GcDep {
+        self.data.to_dep()
+    }
 }
 
 impl Trace for Listener {

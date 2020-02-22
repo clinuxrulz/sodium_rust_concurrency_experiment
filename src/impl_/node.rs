@@ -1,5 +1,5 @@
 use crate::impl_::dep::Dep;
-use crate::impl_::gc::{Finalize, Gc, GcCell, GcCellRef, GcCellRefMut, GcWeak, Trace, Tracer};
+use crate::impl_::gc::{Finalize, Gc, GcCell, GcCellRef, GcCellRefMut, GcDep, GcWeak, Trace, Tracer};
 use crate::impl_::sodium_ctx::SodiumCtx;
 
 use std::collections::HashMap;
@@ -9,6 +9,12 @@ use std::fmt;
 pub struct Node {
     pub data: Gc<GcCell<NodeData>>,
     pub sodium_ctx: SodiumCtx
+}
+
+impl Into<GcDep> for Node {
+    fn into(self) -> GcDep {
+        self.data.to_dep()
+    }
 }
 
 impl Trace for Node {

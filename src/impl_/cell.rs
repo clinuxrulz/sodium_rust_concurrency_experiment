@@ -1,5 +1,5 @@
 use crate::impl_::dep::Dep;
-use crate::impl_::gc::{Finalize, Gc, GcCell, GcWeak, Trace, Tracer};
+use crate::impl_::gc::{Finalize, Gc, GcCell, GcDep, GcWeak, Trace, Tracer};
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
@@ -22,6 +22,12 @@ use std::mem;
 
 pub struct Cell<A:'static> {
     data: Gc<GcCell<CellData<A>>>
+}
+
+impl<A> Into<GcDep> for Cell<A> {
+    fn into(self) -> GcDep {
+        self.data.to_dep()
+    }
 }
 
 impl<A> Trace for Cell<A> {
@@ -342,7 +348,7 @@ impl<A:'static> Cell<A> {
                         vec![csa.sample().node()]
                     );
                 }
-                node1.add_keep_alive(Dep::new(inner_s.clone()));
+                node1.add_keep_alive(Dep::new(inner_s.to_dep()));
                 node1.add_keep_alive(Dep::new(sa));
                 let node2: Node;
                 {
@@ -381,7 +387,7 @@ impl<A:'static> Cell<A> {
                     );
                 }
                 node2.add_keep_alive(Dep::new(node1.clone()));
-                node2.add_keep_alive(Dep::new(inner_s));
+                node2.add_keep_alive(Dep::new(inner_s.to_dep()));
                 node1.add_keep_alive(Dep::new(node2));
                 return node1;
             }
@@ -450,7 +456,7 @@ impl<A:'static> Cell<A> {
                     Dep::new(node1.clone()),
                     Dep::new(node2.clone()),
                     Dep::new(sa.clone()),
-                    Dep::new(last_inner_s.clone())
+                    Dep::new(last_inner_s.clone().to_dep())
                 ]);
                 node1.with_data(|data: &mut NodeData| data.update = Box::new(node1_update));
                 {

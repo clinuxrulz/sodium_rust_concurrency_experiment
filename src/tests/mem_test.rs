@@ -13,6 +13,8 @@ fn node_mem() {
     let sodium_ctx = crate::impl_::sodium_ctx::SodiumCtx::new();
     {
         let ss = StreamSinkImpl::<i32>::new(&sodium_ctx);
+        //let s = ss.stream();
+        //let l = s.listen(|_:&i32| {});
         let node = NodeImpl::new(
             &sodium_ctx,
             || {},

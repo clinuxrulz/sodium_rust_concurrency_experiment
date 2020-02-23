@@ -371,16 +371,14 @@ impl<A:'static> Stream<A> {
         let node =
             Node::new(
                 &self.sodium_ctx(),
-                move || {
-                    let self_op = self_.upgrade();
-                    assert!(self_op.is_some());
-                    let self_ = self_op.unwrap();
+                lambda0(move || {
+                    let self_ = self_.upgrade().unwrap();
                     self_.with_data(|data: &mut StreamData<A>| {
                         for firing in &data.firing_op {
                             k.call(firing)
                         }
                     });
-                },
+                }, vec![Dep::new(self.clone())]),
                 vec![self.node()]
             );
         Listener::new(&self.sodium_ctx(), weak, node)

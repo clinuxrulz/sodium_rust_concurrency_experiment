@@ -26,7 +26,7 @@ pub struct Cell<A:'static> {
 
 impl<A> Trace for Cell<A> {
     fn trace(&self, tracer: &mut Tracer) {
-        tracer(&self.data);
+        self.data.trace(tracer);
     }
 }
 

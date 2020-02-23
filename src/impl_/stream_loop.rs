@@ -12,7 +12,7 @@ pub struct StreamLoop<A:'static> {
 
 impl<A> Trace for StreamLoop<A> {
     fn trace(&self, tracer: &mut Tracer) {
-        tracer(&self.data);
+        self.data.trace(tracer);
     }
 }
 

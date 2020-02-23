@@ -15,7 +15,7 @@ pub struct Node {
 
 impl Trace for Node {
     fn trace(&self, tracer: &mut Tracer) {
-        tracer(&self.data);
+        self.data.trace(tracer);
     }
 }
 

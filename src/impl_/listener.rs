@@ -13,7 +13,7 @@ pub struct Listener {
 
 impl Trace for Listener {
     fn trace(&self, tracer: &mut Tracer) {
-        tracer(&self.data);
+        self.data.trace(tracer);
     }
 }
 

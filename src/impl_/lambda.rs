@@ -14,6 +14,10 @@ impl<FN> Trace for Lambda<FN> {
     }
 }
 
+pub fn lambda0_deps<A,FN:IsLambda0<A>>(f: &FN) -> Vec<Dep> {
+    f.deps_op().map(|deps| deps.clone()).unwrap_or_else(|| Vec::new())
+}
+
 pub fn lambda1_deps<A,B,FN:IsLambda1<A,B>>(f: &FN) -> Vec<Dep> {
     f.deps_op().map(|deps| deps.clone()).unwrap_or_else(|| Vec::new())
 }
@@ -36,6 +40,11 @@ pub fn lambda5_deps<A,B,C,D,E,F,FN:IsLambda5<A,B,C,D,E,F>>(f: &FN) -> Vec<Dep> {
 
 pub fn lambda6_deps<A,B,C,D,E,F,G,FN:IsLambda6<A,B,C,D,E,F,G>>(f: &FN) -> Vec<Dep> {
     f.deps_op().map(|deps| deps.clone()).unwrap_or_else(|| Vec::new())
+}
+
+pub trait IsLambda0<A> {
+    fn call(&mut self) -> A;
+    fn deps_op<'r>(&'r self) -> Option<&'r Vec<Dep>>;
 }
 
 pub trait IsLambda1<A,B> {
@@ -66,6 +75,28 @@ pub trait IsLambda5<A,B,C,D,E,F> {
 pub trait IsLambda6<A,B,C,D,E,F,G> {
     fn call(&mut self, a: &A, b: &B, c: &C, d: &D, e: &E, f: &F) -> G;
     fn deps_op<'r>(&'r self) -> Option<&'r Vec<Dep>>;
+}
+
+impl<A,FN:FnMut()->A> IsLambda0<A> for Lambda<FN> {
+
+    fn call(&mut self) -> A {
+        (self.f)()
+    }
+
+    fn deps_op<'r>(&'r self) -> Option<&'r Vec<Dep>> {
+        Some(&self.deps)
+    }
+}
+
+impl<A,FN:FnMut()->A> IsLambda0<A> for FN {
+
+    fn call(&mut self) -> A {
+        self()
+    }
+
+    fn deps_op<'r>(&'r self) -> Option<&'r Vec<Dep>> {
+        None
+    }
 }
 
 impl<A,B,FN:FnMut(&A)->B> IsLambda1<A,B> for Lambda<FN> {
@@ -198,6 +229,10 @@ impl<A,B,C,D,E,F,G,FN:FnMut(&A,&B,&C,&D,&E,&F)->G> IsLambda6<A,B,C,D,E,F,G> for 
     fn deps_op<'r>(&'r self) -> Option<&'r Vec<Dep>> {
         None
     }
+}
+
+pub fn lambda0<A,FN:FnMut()->A>(f: FN, deps: Vec<Dep>) -> Lambda<FN> {
+    Lambda { f, deps }
 }
 
 pub fn lambda1<A,B,FN:FnMut(&A)->B>(f: FN, deps: Vec<Dep>) -> Lambda<FN> {

@@ -7,6 +7,7 @@ use crate::impl_::listener::Listener;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::stream_loop::StreamLoop;
 use crate::impl_::stream_sink::StreamSink;
+use crate::impl_::lambda::IsLambda0;
 use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 use crate::impl_::lambda::{lambda1, lambda1_deps, lambda2_deps};
@@ -106,11 +107,11 @@ impl<A:'static> Stream<A> {
         };
         let node = mk_node(&s);
         s.with_data(|data: &mut StreamData<A>| data.node = node.clone());
-        let mut update: Box<dyn FnMut()> = Box::new(|| {});
+        let mut update: Box<dyn IsLambda0<()>> = Box::new(|| {});
         node.with_data(|data: &mut NodeData| {
             mem::swap(&mut update, &mut data.update);
         });
-        update();
+        update.call();
         node.with_data(|data: &mut NodeData| {
             mem::swap(&mut update, &mut data.update);
         });

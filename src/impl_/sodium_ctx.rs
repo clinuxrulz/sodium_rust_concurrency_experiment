@@ -1,3 +1,4 @@
+use crate::impl_::lambda::IsLambda0;
 use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
@@ -297,11 +298,11 @@ impl SodiumCtx {
                 .any(|node: &Node| { node.with_data(|data: &mut NodeData| data.changed) });
         // if dependencies changed, then execute update on current node
         if any_changed {
-            let mut update: Box<dyn FnMut()> = Box::new(|| {});
+            let mut update: Box<dyn IsLambda0<()>> = Box::new(|| {});
             node.with_data(|data: &mut NodeData| {
                 mem::swap(&mut update, &mut data.update);
             });
-            update();
+            update.call();
             node.with_data(|data: &mut NodeData| {
                 mem::swap(&mut update, &mut data.update);
             });

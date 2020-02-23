@@ -1,5 +1,6 @@
-use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::dep::Dep;
+use crate::impl_::lambda::{IsLambda0};
+use crate::impl_::sodium_ctx::SodiumCtx;
 
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
@@ -27,7 +28,7 @@ pub struct WeakNode {
 pub struct NodeData {
     pub visited: bool,
     pub changed: bool,
-    pub update: Box<dyn FnMut()>,
+    pub update: Box<dyn IsLambda0<()>>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>,
     pub keep_alive: Vec<Dep>,
@@ -36,12 +37,21 @@ pub struct NodeData {
 
 impl Trace for NodeData {
     fn trace(&self, tracer: &mut Tracer) {
+        {
+            let deps_op = self.update.deps_op();
+            if let Some(deps) = deps_op {
+                for dep in deps {
+                    dep.trace(tracer);
+                }
+            }
+        }
         for node in &self.dependencies {
             node.trace(tracer);
         }
+        /*
         for node in &self.keep_alive {
             node.trace(tracer);
-        }
+        }*/
     }
 }
 
@@ -68,7 +78,7 @@ impl Drop for NodeData {
 }
 
 impl Node {
-    pub fn new<UPDATE:FnMut()+'static>(sodium_ctx: &SodiumCtx, update: UPDATE, dependencies: Vec<Node>) -> Self {
+    pub fn new<UPDATE:IsLambda0<()>+'static>(sodium_ctx: &SodiumCtx, update: UPDATE, dependencies: Vec<Node>) -> Self {
         let result =
             Node {
                 data:

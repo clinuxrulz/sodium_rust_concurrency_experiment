@@ -10,7 +10,7 @@ use crate::impl_::stream_sink::StreamSink;
 use crate::impl_::lambda::IsLambda0;
 use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
-use crate::impl_::lambda::{lambda1, lambda1_deps, lambda2_deps};
+use crate::impl_::lambda::{lambda0, lambda1, lambda1_deps, lambda2_deps};
 
 use std::cell::RefCell;
 use std::mem;
@@ -67,10 +67,9 @@ impl<A:'static> Stream<A> {
                 let s = s.clone();
                 let node = Node::new(
                     sodium_ctx,
-                    || {},
+                    lambda0(|| {}, vec![Dep::new(s)]),
                     Vec::new()
                 );
-                node.add_keep_alive(Dep::new(s));
                 node
             }
         )
@@ -168,22 +167,24 @@ impl<A:'static> Stream<A> {
             |s: &Stream<B>| {
                 let s_ = Stream::downgrade(s);
                 let f_deps = lambda1_deps(&f);
+                let mut deps = Vec::new();
+                for f_dep in f_deps {
+                    deps.push(f_dep.clone());
+                }
+                deps.push(Dep::new(self.clone()));
+                deps.push(Dep::new(s.clone()));
                 let node = Node::new(
                     &sodium_ctx,
-                    move || {
-                        let self_op = self_.upgrade();
-                        assert!(self_op.is_some());
-                        let self_ = self_op.unwrap();
+                    lambda0(move || {
+                        let self_ = self_.upgrade().unwrap();
                         self_.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
                                 s_.upgrade().unwrap()._send(f.call(firing));
                             }
                         })
-                    },
+                    }, deps),
                     vec![self.node()]
                 );
-                node.add_keep_alives(f_deps);
-                node.add_keep_alive(Dep::new(s.clone()));
                 node
             }
         )

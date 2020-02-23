@@ -2,6 +2,42 @@ use crate::CellSink;
 use crate::SodiumCtx;
 use crate::StreamSink;
 
+use crate::impl_::dep::Dep;
+use crate::impl_::lambda::lambda0;
+use crate::impl_::node::Node as NodeImpl;
+use crate::impl_::node::NodeData;
+
+#[test]
+fn node_mem() {
+    let sodium_ctx = crate::impl_::sodium_ctx::SodiumCtx::new();
+    {
+        let node = NodeImpl::new(
+            &sodium_ctx,
+            || {},
+            vec![]
+        );
+        let node2 = NodeImpl::downgrade(&node);
+        let node3 = node.clone();
+        node.with_data(
+            |data: &mut NodeData|
+                data.update = Box::new(lambda0(
+                    move || {
+                        let _node = node2.upgrade().unwrap();
+                        //node2.clone();
+                    },
+                    vec![Dep::new(node3)]
+                ))
+        )
+    }
+    sodium_ctx.collect_cycles();
+    let node_count = sodium_ctx.node_count();
+    let node_ref_count = sodium_ctx.node_ref_count();
+    println!();
+    println!("node_count {}", node_count);
+    println!("node_ref_count {}", node_ref_count);
+    assert_eq!(node_count, 0);
+}
+
 #[test]
 fn map_s_mem() {
     let sodium_ctx = SodiumCtx::new();

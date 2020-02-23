@@ -1,8 +1,7 @@
-use std::rc::Rc;
-use bacon_rajan_cc::{Trace, Tracer};
+use bacon_rajan_cc::{Cc, Trace, Tracer};
 
 pub struct Dep {
-    pub data: Rc<dyn Trace>
+    pub data: Cc<Box<dyn Trace>>
 }
 
 impl Trace for Dep {
@@ -13,7 +12,7 @@ impl Trace for Dep {
 
 impl Dep {
     pub fn new<X:Trace+'static>(x: X) -> Dep {
-        Dep { data: Rc::new(x) }
+        Dep { data: Cc::new(Box::new(x)) }
     }
 }
 

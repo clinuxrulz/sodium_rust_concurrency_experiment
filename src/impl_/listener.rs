@@ -25,9 +25,7 @@ pub struct ListenerData {
 
 impl Trace for ListenerData {
     fn trace(&self, tracer: &mut Tracer) {
-        if let Some(ref node) = self.node_op {
-            node.trace(tracer);
-        }
+        self.node_op.trace(tracer);
     }
 }
 

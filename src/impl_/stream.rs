@@ -233,9 +233,16 @@ impl<A:'static> Stream<A> {
                 let s2_ = Stream::downgrade(&s2);
                 let self_ = Stream::downgrade(&self);
                 let f_deps = lambda2_deps(&f);
+                let mut deps = Vec::new();
+                for f_dep in f_deps {
+                    deps.push(f_dep);
+                }
+                deps.push(Dep::new(self.clone()));
+                deps.push(Dep::new(s2.clone()));
+                deps.push(Dep::new(s.clone()));
                 let node = Node::new(
                     &sodium_ctx,
-                    move || {
+                    lambda0(move || {
                         let self_ = self_.upgrade().unwrap();
                         let s2_ = s2_.upgrade().unwrap();
                         let s_ = s_.upgrade().unwrap();
@@ -254,11 +261,9 @@ impl<A:'static> Stream<A> {
                                 }
                             })
                         })
-                    },
+                    }, deps),
                     vec![self.node(), s2.node()]
                 );
-                node.add_keep_alives(f_deps);
-                node.add_keep_alive(Dep::new(s.clone()));
                 node
             }
         )

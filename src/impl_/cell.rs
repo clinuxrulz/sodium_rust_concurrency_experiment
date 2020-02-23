@@ -13,7 +13,7 @@ use crate::impl_::lambda::IsLambda3;
 use crate::impl_::lambda::IsLambda4;
 use crate::impl_::lambda::IsLambda5;
 use crate::impl_::lambda::IsLambda6;
-use crate::impl_::lambda::{lambda1, lambda2, lambda3, lambda2_deps, lambda3_deps, lambda4_deps, lambda5_deps, lambda6_deps};
+use crate::impl_::lambda::{lambda0, lambda1, lambda2, lambda3, lambda2_deps, lambda3_deps, lambda4_deps, lambda5_deps, lambda6_deps};
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -95,7 +95,7 @@ impl<A:'static> Cell<A> {
             let sodium_ctx2 = sodium_ctx.clone();
             node = Node::new(
                 &sodium_ctx2,
-                move || {
+                lambda0(move || {
                     let c_ = c_.upgrade().unwrap();
                     let stream2 = stream2.upgrade().unwrap();
                     let firing_op = stream2.with_firing_op(|firing_op| firing_op.clone());
@@ -118,11 +118,9 @@ impl<A:'static> Cell<A> {
                             });
                         }
                     }
-                },
+                }, vec![Dep::new(c.clone()), Dep::new(stream.clone())]),
                 vec![stream.node()]
             );
-            node.add_keep_alive(Dep::new(c.clone()));
-            node.add_keep_alive(Dep::new(stream.clone()));
         }
         c.with_data(|data: &mut CellData<A>| data.node = node);
         c

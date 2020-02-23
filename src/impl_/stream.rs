@@ -22,7 +22,7 @@ pub struct Stream<A:'static> {
 
 impl<A> Trace for Stream<A> {
     fn trace(&self, tracer: &mut Tracer) {
-        tracer(&self.data);
+        self.data.trace(tracer);
     }
 }
 
@@ -99,7 +99,7 @@ impl<A:'static> Stream<A> {
         let s = Stream {
             data: Cc::new(RefCell::new(StreamData {
                 firing_op: None,
-                node: sodium_ctx.null_node(),
+                node: Node::new(sodium_ctx, || {}, vec![]),
                 sodium_ctx: sodium_ctx.clone(),
                 coalescer_op: None
             }))

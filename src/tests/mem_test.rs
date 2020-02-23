@@ -6,11 +6,13 @@ use crate::impl_::dep::Dep;
 use crate::impl_::lambda::lambda0;
 use crate::impl_::node::Node as NodeImpl;
 use crate::impl_::node::NodeData;
+use crate::impl_::stream_sink::StreamSink as StreamSinkImpl;
 
 #[test]
 fn node_mem() {
     let sodium_ctx = crate::impl_::sodium_ctx::SodiumCtx::new();
     {
+        let ss = StreamSinkImpl::<i32>::new(&sodium_ctx);
         let node = NodeImpl::new(
             &sodium_ctx,
             || {},

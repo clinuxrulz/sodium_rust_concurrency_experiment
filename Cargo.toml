@@ -7,4 +7,4 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bacon_rajan_cc = { git = "https://github.com/clinuxrulz/bacon-rajan-cc.git", rev = "d3a38c6c23dbeb1a8b0716bebebba7df1da085d5" }
+bacon_rajan_cc = { git = "https://github.com/clinuxrulz/bacon-rajan-cc.git", rev = "22fb5d7e53ef06a6afb04f5b39b05d969b648300" }

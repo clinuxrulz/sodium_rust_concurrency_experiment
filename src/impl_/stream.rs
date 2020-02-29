@@ -373,6 +373,11 @@ impl<A:'static> Stream<A> {
 
     pub fn _listen<K:IsLambda1<A,()>+'static>(&self, mut k: K, weak: bool) -> Listener {
         let self_ = Stream::downgrade(self);
+        let mut deps = Vec::new();
+        for dep in lambda1_deps(&k) {
+            deps.push(dep);
+        }
+        deps.push(Dep::new(self.clone()));
         let node =
             Node::new(
                 &self.sodium_ctx(),
@@ -383,7 +388,7 @@ impl<A:'static> Stream<A> {
                             k.call(firing)
                         }
                     });
-                }, vec![Dep::new(self.clone())]),
+                }, deps),
                 vec![self.node()]
             );
         Listener::new(&self.sodium_ctx(), weak, node)

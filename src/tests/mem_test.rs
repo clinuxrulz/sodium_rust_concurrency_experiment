@@ -49,7 +49,6 @@ fn map_s_mem() {
         let s1 = ss1.stream();
         let _s2 = s1.map_to(5);
         let l = _s2.listen_weak(|_:&u32| {});
-        println!("l: {:?}", l.impl_);
         l.unlisten();
     }
     sodium_ctx.impl_.collect_cycles();

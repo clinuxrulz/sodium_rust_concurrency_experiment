@@ -58,14 +58,7 @@ impl<A> Trace for CellData<A> {
 
 impl<A:'static> Cell<A> {
     pub fn new(sodium_ctx: &SodiumCtx, value: A) -> Cell<A> where A: Clone {
-        Cell {
-            data: Cc::new(RefCell::new(CellData {
-                value: Lazy::of_value(value),
-                next_value_op: None,
-                stream: Stream::new(sodium_ctx),
-                node: sodium_ctx.null_node()
-            }))
-        }
+        Cell::_new(sodium_ctx, Stream::new(sodium_ctx), Lazy::of_value(value))
     }
 
     pub fn _new(sodium_ctx: &SodiumCtx, stream: Stream<A>, value: Lazy<A>) -> Cell<A> where A: Clone {

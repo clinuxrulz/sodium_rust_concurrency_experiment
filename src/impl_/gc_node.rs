@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::Mutex;
 
 type Tracer = dyn FnMut(&GcNode);
 
@@ -11,6 +13,10 @@ enum Color {
 }
 
 struct GcNode {
+    data: Arc<Mutex<GcNodeData>>
+}
+
+struct GcNodeData {
     ref_count: u32,
     color: Color,
     buffered: bool,
@@ -27,27 +33,49 @@ impl GcNode {
         trace: TRACE
     ) -> GcNode {
         GcNode {
-            ref_count: 1,
-            color: Color::Black,
-            buffered: false,
-            deconstructor: Box::new(deconstructor),
-            trace: Box::new(trace)
+            data: Arc::new(Mutex::new(GcNodeData {
+                ref_count: 1,
+                color: Color::Black,
+                buffered: false,
+                deconstructor: Box::new(deconstructor),
+                trace: Box::new(trace)
+            }))
         }
     }
 
+    pub fn with_data<R,K:FnMut(&mut GcNodeData)->R>(&self, mut k: K)->R {
+        let mut l = self.data.lock();
+        let data = l.as_mut().unwrap();
+        k(data)
+    }
+
     pub fn inc_ref(&mut self) {
-        self.ref_count = self.ref_count + 1;
+        self.with_data(
+            |data: &mut GcNodeData|
+                data.ref_count = data.ref_count + 1
+        );
     }
 
     pub fn dec_ref(&mut self) {
-        self.ref_count = self.ref_count - 1;
+        let ref_count =
+            self.with_data(
+                |data: &mut GcNodeData| {
+                    data.ref_count = data.ref_count - 1;
+                    data.ref_count
+                }
+            );
+        if ref_count == 0 {
+            self.free();
+        } else {
+
+        }
     }
 
     pub fn free(&self) {
-        (self.deconstructor)();
+        self.with_data(|data: &mut GcNodeData| (data.deconstructor)());
     }
-
+/*
     pub fn trace(&self, tracer: &mut Tracer) {
         (self.trace)(tracer);
-    }
+    }*/
 }

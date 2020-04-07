@@ -4,7 +4,7 @@ use std::fmt;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use crate::impl_::gc_node::GcNode;
+use crate::impl_::gc_node::{GcNode, Tracer};
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
 
@@ -55,29 +55,53 @@ impl Node {
         let result_forward_ref: Arc<Mutex<Option<Node>>> = Arc::new(Mutex::new(None));
         let deconstructor;
         let trace;
-        { // deconstructor and trace
-            let dependencies = dependencies.clone();
-            let dependencies = Arc::new(Mutex::new(dependencies));
-            {
-                let dependencies = dependencies.clone();
-                deconstructor = || {
-                    let node;
-                    {
-                        let mut l = result_forward_ref.lock();
-                        let node2 = l.as_ref().unwrap();
-                        let node2: &Option<Node> = &node2;
-                        node = node2.unwrap().clone();
-                    }
-                    let mut l = dependencies.lock();
-                    let dependencies = l.as_mut().unwrap();
-                    let dependencies: &mut Vec<Node> = &mut dependencies;
-                    for dependency in dependencies {
-                        let mut l = dependency.data.lock();
-                        let dependency = l.as_mut().unwrap();
-                        dependency.dependents.retain(|dependent| !Arc::ptr_eq(&dependent.data, &node.data));
-                    }
-                };
-            }
+        { // deconstructor
+            let result_forward_ref = result_forward_ref.clone();
+            deconstructor = move || {
+                let node;
+                {
+                    let mut l = result_forward_ref.lock();
+                    let node2 = l.as_ref().unwrap();
+                    let node2: &Option<Node> = &node2;
+                    node = node2.unwrap().clone();
+                }
+                let mut dependencies = Vec::new();
+                node.with_data(|data: &mut NodeData| {
+                    std::mem::swap(&mut data.dependencies, &mut &mut dependencies);
+                    data.dependents.clear();
+                });
+                for dependency in dependencies {
+                    let mut l = dependency.data.lock();
+                    let dependency = l.as_mut().unwrap();
+                    dependency.dependents.retain(|dependent| !Arc::ptr_eq(&dependent.data, &node.data));
+                }
+            };
+        }
+        { // trace
+            let result_forward_ref = result_forward_ref.clone();
+            trace = move |tracer: &mut Tracer| {
+                let node;
+                {
+                    let mut l = result_forward_ref.lock();
+                    let node2 = l.as_ref().unwrap();
+                    let node2: &Option<Node> = &node2;
+                    node = node2.unwrap().clone();
+                }
+                let mut dependencies = Vec::new();
+                node.with_data(|data: &mut NodeData|
+                    std::mem::swap(&mut data.dependencies, &mut &mut dependencies)
+                );
+                for dependency in &dependencies {
+                    let gc_node =
+                        dependency.with_data(|data: &mut NodeData|
+                            dependency.gc_node.clone()
+                        );
+                    tracer(gc_node);
+                }
+                node.with_data(|data: &mut NodeData|
+                    std::mem::swap(&mut data.dependencies, &mut &mut dependencies)
+                );
+            };
         }
         let result =
             Node {
@@ -95,7 +119,7 @@ impl Node {
                         }
                     )),
                 gc_node: GcNode::new(
-                    sodium_ctx.gc_ctx(),
+                    &sodium_ctx.gc_ctx(),
                     deconstructor,
                     trace
                 ),

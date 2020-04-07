@@ -1,6 +1,3 @@
-use std::mem;
-use std::sync::Arc;
-use std::sync::Mutex;
 
 type Tracer = dyn FnMut(&GcNode);
 
@@ -14,7 +11,7 @@ enum Color {
 }
 
 struct GcNode {
-    data: Arc<Mutex<GcNodeData>>
+    data: *mut GcNodeData
 }
 
 struct GcNodeData {
@@ -34,7 +31,7 @@ impl GcNode {
         trace: TRACE
     ) -> GcNode {
         GcNode {
-            data: Arc::new(Mutex::new(GcNodeData {
+            data: Box::into_raw(Box::new(GcNodeData {
                 ref_count: 1,
                 color: Color::Black,
                 buffered: false,
@@ -45,9 +42,7 @@ impl GcNode {
     }
 
     pub fn with_data<R,K:FnMut(&mut GcNodeData)->R>(&self, mut k: K)->R {
-        let mut l = self.data.lock();
-        let data = l.as_mut().unwrap();
-        k(data)
+        unsafe { k(&mut *self.data) }
     }
 
     pub fn inc_ref(&mut self) {
@@ -73,24 +68,14 @@ impl GcNode {
     }
 
     pub fn free(&self) {
-        let mut deconstructor: Box<dyn Fn()> = Box::new(|| {});
         self.with_data(|data: &mut GcNodeData| {
-            mem::swap(&mut deconstructor, &mut data.deconstructor);
-        });
-        deconstructor();
-        self.with_data(|data: &mut GcNodeData| {
-            mem::swap(&mut deconstructor, &mut data.deconstructor);
+            (data.deconstructor)();
         });
     }
 
     pub fn trace(&self, tracer: &mut Tracer) {
-        let mut trace: Box<dyn Fn(&mut Tracer)> = Box::new(|_tracer| {});
         self.with_data(|data: &mut GcNodeData| {
-            mem::swap(&mut trace, &mut data.trace);
-        });
-        trace(tracer);
-        self.with_data(|data: &mut GcNodeData| {
-            mem::swap(&mut trace, &mut data.trace);
+            (data.trace)();
         });
     }
 }

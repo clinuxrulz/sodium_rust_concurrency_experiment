@@ -28,11 +28,11 @@ pub struct NodeData {
 impl Clone for Node {
     fn clone(&self) -> Self {
         self.sodium_ctx.inc_node_ref_count();
-        self.inc_ref_count();
+        self.gc_node.inc_ref();
         Node {
             data: self.data.clone(),
-            sodium_ctx: self.sodium_ctx.clone(),
-            gc_data: self.gc_data.clone()
+            gc_node: self.gc_node.clone(),
+            sodium_ctx: self.sodium_ctx.clone()
         }
     }
 }
@@ -40,19 +40,7 @@ impl Clone for Node {
 impl Drop for Node {
     fn drop(&mut self) {
         self.sodium_ctx.dec_node_ref_count();
-        let ref_count = self.dec_ref_count();
-        if ref_count > 0 {
-            // TODO: Use buffered flag here per node rather than collecting_cycles flag.
-            let allow_add_roots = self.sodium_ctx.with_data(|data: &mut SodiumCtxData| data.allow_add_roots);
-            if allow_add_roots {
-                self.sodium_ctx.add_gc_root(self);
-            }
-        } else {
-            let dependencies = self.with_data(|data: &mut NodeData| data.dependencies.clone());
-            for dependency in dependencies {
-                self.remove_dependency(&dependency);
-            }
-        }
+        self.gc_node.dec_ref();
     }
 }
 
@@ -64,6 +52,33 @@ impl Drop for NodeData {
 
 impl Node {
     pub fn new<UPDATE:FnMut()+Send+'static>(sodium_ctx: &SodiumCtx, update: UPDATE, dependencies: Vec<Node>) -> Self {
+        let result_forward_ref: Arc<Mutex<Option<Node>>> = Arc::new(Mutex::new(None));
+        let deconstructor;
+        let trace;
+        { // deconstructor and trace
+            let dependencies = dependencies.clone();
+            let dependencies = Arc::new(Mutex::new(dependencies));
+            {
+                let dependencies = dependencies.clone();
+                deconstructor = || {
+                    let node;
+                    {
+                        let mut l = result_forward_ref.lock();
+                        let node2 = l.as_ref().unwrap();
+                        let node2: &Option<Node> = &node2;
+                        node = node2.unwrap().clone();
+                    }
+                    let mut l = dependencies.lock();
+                    let dependencies = l.as_mut().unwrap();
+                    let dependencies: &mut Vec<Node> = &mut dependencies;
+                    for dependency in dependencies {
+                        let mut l = dependency.data.lock();
+                        let dependency = l.as_mut().unwrap();
+                        dependency.dependents.retain(|dependent| !Arc::ptr_eq(&dependent.data, &node.data));
+                    }
+                };
+            }
+        }
         let result =
             Node {
                 data:
@@ -79,14 +94,19 @@ impl Node {
                             sodium_ctx: sodium_ctx.clone()
                         }
                     )),
-                gc_data: Arc::new(Mutex::new(
-                    NodeGcData {
-                        ref_count: 1,
-                        visited: false
-                    }
-                )),
+                gc_node: GcNode::new(
+                    sodium_ctx.gc_ctx(),
+                    deconstructor,
+                    trace
+                ),
                 sodium_ctx: sodium_ctx.clone()
             };
+        {
+            let mut l = result_forward_ref.lock();
+            let result_forward_ref = l.as_mut().unwrap();
+            let result_forward_ref: &mut Option<Node> = &mut result_forward_ref;
+            *result_forward_ref = Some(result);
+        }
         for dependency in dependencies {
             let mut l = dependency.data.lock();
             let dependency2: &mut NodeData = l.as_mut().unwrap();

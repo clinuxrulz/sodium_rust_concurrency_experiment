@@ -26,8 +26,7 @@ pub struct SodiumCtxData {
     pub post: Vec<Box<dyn FnMut()+Send>>,
     pub keep_alive: Vec<Listener>,
     pub collecting_cycles: bool,
-    pub allow_add_roots: bool,
-    pub gc_roots: Vec<WeakNode>
+    pub allow_add_roots: bool
 }
 
 pub struct ThreadedMode {
@@ -106,6 +105,7 @@ pub fn simple_threaded_mode() -> ThreadedMode {
 impl SodiumCtx {
     pub fn new() -> SodiumCtx {
         SodiumCtx {
+            gc_ctx: GcCtx::new(),
             data:
                 Arc::new(Mutex::new(
                     SodiumCtxData {
@@ -117,14 +117,17 @@ impl SodiumCtx {
                         post: Vec::new(),
                         keep_alive: Vec::new(),
                         collecting_cycles: false,
-                        allow_add_roots: true,
-                        gc_roots: Vec::new()
+                        allow_add_roots: true
                     }
                 )),
             node_count: Arc::new(Mutex::new(0)),
             node_ref_count: Arc::new(Mutex::new(0)),
             threaded_mode: Arc::new(single_threaded_mode())
         }
+    }
+
+    pub fn gc_ctx(&self) -> GcCtx {
+        self.gc_ctx.clone()
     }
 
     pub fn null_node(&self) -> Node {

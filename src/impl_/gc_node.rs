@@ -77,19 +77,19 @@ impl GcNode {
     }
 
     pub fn with_data<R,K:FnOnce(&mut GcNodeData)->R>(&self, mut k: K)->R {
-        let l = self.data.lock();
+        let mut l = self.data.lock();
         let data = l.as_mut().unwrap();
         k(data)
     }
 
-    pub fn inc_ref(&mut self) {
+    pub fn inc_ref(&self) {
         self.with_data(
             |data: &mut GcNodeData|
                 data.ref_count = data.ref_count + 1
         );
     }
 
-    pub fn dec_ref(&mut self) {
+    pub fn dec_ref(&self) {
         let (ref_count, buffered) =
             self.with_data(
                 |data: &mut GcNodeData| {

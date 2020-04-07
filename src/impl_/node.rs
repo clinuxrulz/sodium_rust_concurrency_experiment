@@ -59,10 +59,10 @@ impl Node {
             deconstructor = move || {
                 let node;
                 {
-                    let mut l = result_forward_ref.lock();
+                    let l = result_forward_ref.lock();
                     let node2 = l.as_ref().unwrap();
                     let node2: &Option<Node> = &node2;
-                    node = node2.unwrap().clone();
+                    node = node2.clone().unwrap();
                 }
                 let mut dependencies = Vec::new();
                 node.with_data(|data: &mut NodeData| {
@@ -82,10 +82,10 @@ impl Node {
             trace = move |tracer: &mut Tracer| {
                 let node;
                 {
-                    let mut l = result_forward_ref.lock();
+                    let l = result_forward_ref.lock();
                     let node2 = l.as_ref().unwrap();
                     let node2: &Option<Node> = &node2;
-                    node = node2.unwrap().clone();
+                    node = node2.clone().unwrap();
                 }
                 let mut dependencies = Vec::new();
                 node.with_data(|data: &mut NodeData|
@@ -126,15 +126,16 @@ impl Node {
                 sodium_ctx: sodium_ctx.clone()
             };
         {
+            let result = result.clone();
             let mut l = result_forward_ref.lock();
-            let result_forward_ref = l.as_mut().unwrap();
+            let mut result_forward_ref = l.as_mut().unwrap();
             let result_forward_ref: &mut Option<Node> = &mut result_forward_ref;
             *result_forward_ref = Some(result);
         }
         for dependency in dependencies {
             let mut l = dependency.data.lock();
             let dependency2: &mut NodeData = l.as_mut().unwrap();
-            dependency2.dependents.push(result);
+            dependency2.dependents.push(result.clone());
         }
         sodium_ctx.inc_node_ref_count();
         sodium_ctx.inc_node_count();

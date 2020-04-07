@@ -69,6 +69,7 @@ impl Node {
                 node.with_data(|data: &mut NodeData| {
                     std::mem::swap(&mut data.dependencies, &mut &mut dependencies);
                     data.dependents.clear();
+                    data.update = Box::new(|| {});
                 });
                 for dependency in dependencies {
                     let mut l = dependency.data.lock();

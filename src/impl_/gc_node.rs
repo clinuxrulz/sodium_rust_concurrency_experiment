@@ -13,7 +13,7 @@ enum Color {
 }
 
 #[derive(Clone)]
-struct GcNode {
+pub struct GcNode {
     gc_ctx: GcCtx,
     data: *mut GcNodeData
 }
@@ -27,7 +27,7 @@ struct GcNodeData {
 }
 
 #[derive(Clone)]
-struct GcCtx {
+pub struct GcCtx {
     data: Arc<Mutex<GcCtxData>>
 }
 
@@ -36,6 +36,14 @@ struct GcCtxData {
 }
 
 impl GcCtx {
+    pub fn new() -> GcCtx {
+        GcCtx {
+            data: Arc::new(Mutex::new(GcCtxData {
+                roots: Vec::new()
+            }))
+        }
+    }
+
     pub fn with_data<R,K:FnOnce(&mut GcCtxData)->R>(&self, mut k:K) -> R {
         let mut l = self.data.lock();
         let data = l.as_mut().unwrap();

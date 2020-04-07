@@ -1,8 +1,7 @@
+use crate::impl_::gc_node::GcCtx;
 use crate::impl_::listener::Listener;
 use crate::impl_::node::Node;
 use crate::impl_::node::NodeData;
-use crate::impl_::node::NodeGcData;
-use crate::impl_::node::WeakNode;
 
 use std::mem;
 use std::sync::Arc;
@@ -11,6 +10,7 @@ use std::thread;
 
 #[derive(Clone)]
 pub struct SodiumCtx {
+    gc_ctx: GcCtx,
     data: Arc<Mutex<SodiumCtxData>>,
     node_count: Arc<Mutex<usize>>,
     node_ref_count: Arc<Mutex<usize>>,

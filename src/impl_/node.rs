@@ -1,23 +1,16 @@
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::Weak;
 use std::fmt;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+use crate::impl_::gc_node::GcNode;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
 
 pub struct Node {
     pub data: Arc<Mutex<NodeData>>,
-    pub gc_data: Arc<Mutex<NodeGcData>>,
-    pub sodium_ctx: SodiumCtx
-}
-
-#[derive(Clone)]
-pub struct WeakNode {
-    pub data: Weak<Mutex<NodeData>>,
-    pub gc_data: Arc<Mutex<NodeGcData>>,
+    pub gc_node: GcNode,
     pub sodium_ctx: SodiumCtx
 }
 
@@ -25,16 +18,11 @@ pub struct NodeData {
     pub visited: bool,
     pub changed: bool,
     pub update: Box<dyn FnMut()+Send>,
-    pub update_dependencies: Vec<WeakNode>,
+    pub update_dependencies: Vec<Node>,
     pub dependencies: Vec<Node>,
-    pub dependents: Vec<WeakNode>,
+    pub dependents: Vec<Node>,
     pub keep_alive: Vec<Node>,
     pub sodium_ctx: SodiumCtx
-}
-
-pub struct NodeGcData {
-    pub ref_count: usize,
-    pub visited: bool
 }
 
 impl Clone for Node {

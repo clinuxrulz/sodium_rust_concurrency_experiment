@@ -145,10 +145,6 @@ impl SodiumCtx {
         })
     }
 
-    pub fn add_gc_root(&self, node: &Node) {
-        self.with_data(|data: &mut SodiumCtxData| data.gc_roots.push(Node::downgrade(node)));
-    }
-
     pub fn transaction<R,K:FnOnce()->R>(&self, k:K) -> R {
         self.with_data(|data: &mut SodiumCtxData| {
             data.transaction_depth = data.transaction_depth + 1;
@@ -170,11 +166,8 @@ impl SodiumCtx {
             node.with_data(|data2: &mut NodeData| {
                 data2.dependents
                     .iter()
-                    .flat_map(|node: &WeakNode| {
-                        node.upgrade()
-                    })
-                    .for_each(|node: Node| {
-                        data.changed_nodes.push(node);
+                    .for_each(|node: &Node| {
+                        data.changed_nodes.push(node.clone());
                     });
             });
         });
@@ -335,9 +328,7 @@ impl SodiumCtx {
                 let dependents = dependents.clone();
                 let _self = self.clone();
                 for dependent in dependents {
-                    if let Some(dependent2) = dependent.upgrade() {
-                        _self.update_node(&dependent2);
-                    }
+                    _self.update_node(&dependent);
                 }
             }
         }

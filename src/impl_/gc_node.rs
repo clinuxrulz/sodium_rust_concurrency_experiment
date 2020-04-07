@@ -3,7 +3,7 @@ use std::sync::Mutex;
 
 pub type Tracer = dyn FnMut(&GcNode);
 
-pub type Trace = dyn Fn(&mut Tracer);
+pub type Trace = dyn Fn(&mut Tracer) + Send + Sync;
 
 enum Color {
     Black,
@@ -15,14 +15,14 @@ enum Color {
 #[derive(Clone)]
 pub struct GcNode {
     gc_ctx: GcCtx,
-    data: *mut GcNodeData
+    data: Arc<Mutex<GcNodeData>>
 }
 
 struct GcNodeData {
     ref_count: u32,
     color: Color,
     buffered: bool,
-    deconstructor: Box<dyn Fn()>,
+    deconstructor: Box<dyn Fn()+Send+Sync>,
     trace: Box<Trace>
 }
 
@@ -57,8 +57,8 @@ impl GcCtx {
 
 impl GcNode {
     pub fn new<
-        DECONSTRUCTOR: 'static + Fn(),
-        TRACE: 'static + Fn(&mut Tracer)
+        DECONSTRUCTOR: 'static + Fn() + Send + Sync,
+        TRACE: 'static + Fn(&mut Tracer) + Send + Sync
     >(
         gc_ctx: &GcCtx,
         deconstructor: DECONSTRUCTOR,
@@ -66,7 +66,7 @@ impl GcNode {
     ) -> GcNode {
         GcNode {
             gc_ctx: gc_ctx.clone(),
-            data: Box::into_raw(Box::new(GcNodeData {
+            data: Arc::new(Mutex::new(GcNodeData {
                 ref_count: 1,
                 color: Color::Black,
                 buffered: false,
@@ -77,7 +77,9 @@ impl GcNode {
     }
 
     pub fn with_data<R,K:FnOnce(&mut GcNodeData)->R>(&self, mut k: K)->R {
-        unsafe { k(&mut *self.data) }
+        let l = self.data.lock();
+        let data = l.as_mut().unwrap();
+        k(data)
     }
 
     pub fn inc_ref(&mut self) {
@@ -105,6 +107,8 @@ impl GcNode {
     pub fn free(&self) {
         self.with_data(|data: &mut GcNodeData| {
             (data.deconstructor)();
+            data.deconstructor = Box::new(|| {});
+            data.trace = Box::new(|_tracer| {});
         });
     }
 

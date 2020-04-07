@@ -12,7 +12,9 @@ enum Color {
     White
 }
 
+#[derive(Clone)]
 struct GcNode {
+    gc_ctx: GcCtx,
     data: *mut GcNodeData
 }
 
@@ -24,6 +26,7 @@ struct GcNodeData {
     trace: Box<Trace>
 }
 
+#[derive(Clone)]
 struct GcCtx {
     data: Arc<Mutex<GcCtxData>>
 }
@@ -49,10 +52,12 @@ impl GcNode {
         DECONSTRUCTOR: 'static + Fn(),
         TRACE: 'static + Fn(&mut Tracer)
     >(
+        gc_ctx: &GcCtx,
         deconstructor: DECONSTRUCTOR,
         trace: TRACE
     ) -> GcNode {
         GcNode {
+            gc_ctx: gc_ctx.clone(),
             data: Box::into_raw(Box::new(GcNodeData {
                 ref_count: 1,
                 color: Color::Black,
@@ -85,7 +90,7 @@ impl GcNode {
         if ref_count == 0 {
             self.free();
         } else {
-
+            self.gc_ctx.possible_root(self.clone());
         }
     }
 

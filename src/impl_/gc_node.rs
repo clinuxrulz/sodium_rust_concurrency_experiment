@@ -75,7 +75,7 @@ impl GcNode {
 
     pub fn trace(&self, tracer: &mut Tracer) {
         self.with_data(|data: &mut GcNodeData| {
-            (data.trace)();
+            (data.trace)(tracer);
         });
     }
 }

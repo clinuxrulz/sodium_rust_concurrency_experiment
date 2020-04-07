@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::Mutex;
 
 type Tracer = dyn FnMut(&GcNode);
 
@@ -22,6 +24,26 @@ struct GcNodeData {
     trace: Box<Trace>
 }
 
+struct GcCtx {
+    data: Arc<Mutex<GcCtxData>>
+}
+
+struct GcCtxData {
+    roots: Vec<GcNode>
+}
+
+impl GcCtx {
+    pub fn with_data<R,K:FnOnce(&mut GcCtxData)->R>(&self, mut k:K) -> R {
+        let mut l = self.data.lock();
+        let data = l.as_mut().unwrap();
+        k(data)
+    }
+
+    pub fn possible_root(&self, node: GcNode) {
+        self.with_data(|data: &mut GcCtxData| data.roots.push(node));
+    }
+}
+
 impl GcNode {
     pub fn new<
         DECONSTRUCTOR: 'static + Fn(),
@@ -41,7 +63,7 @@ impl GcNode {
         }
     }
 
-    pub fn with_data<R,K:FnMut(&mut GcNodeData)->R>(&self, mut k: K)->R {
+    pub fn with_data<R,K:FnOnce(&mut GcNodeData)->R>(&self, mut k: K)->R {
         unsafe { k(&mut *self.data) }
     }
 
@@ -53,11 +75,11 @@ impl GcNode {
     }
 
     pub fn dec_ref(&mut self) {
-        let ref_count =
+        let (ref_count, buffered) =
             self.with_data(
                 |data: &mut GcNodeData| {
                     data.ref_count = data.ref_count - 1;
-                    data.ref_count
+                    (data.ref_count, data.buffered)
                 }
             );
         if ref_count == 0 {

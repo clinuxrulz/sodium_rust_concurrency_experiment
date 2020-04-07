@@ -1,3 +1,4 @@
+use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -72,10 +73,24 @@ impl GcNode {
     }
 
     pub fn free(&self) {
-        self.with_data(|data: &mut GcNodeData| (data.deconstructor)());
+        let mut deconstructor: Box<dyn Fn()> = Box::new(|| {});
+        self.with_data(|data: &mut GcNodeData| {
+            mem::swap(&mut deconstructor, &mut data.deconstructor);
+        });
+        deconstructor();
+        self.with_data(|data: &mut GcNodeData| {
+            mem::swap(&mut deconstructor, &mut data.deconstructor);
+        });
     }
-/*
+
     pub fn trace(&self, tracer: &mut Tracer) {
-        (self.trace)(tracer);
-    }*/
+        let mut trace: Box<dyn Fn(&mut Tracer)> = Box::new(|_tracer| {});
+        self.with_data(|data: &mut GcNodeData| {
+            mem::swap(&mut trace, &mut data.trace);
+        });
+        trace(tracer);
+        self.with_data(|data: &mut GcNodeData| {
+            mem::swap(&mut trace, &mut data.trace);
+        });
+    }
 }

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
-type Tracer = dyn FnMut(&GcNode);
+pub type Tracer = dyn FnMut(&GcNode);
 
-type Trace = dyn Fn(&mut Tracer);
+pub type Trace = dyn Fn(&mut Tracer);
 
 enum Color {
     Black,

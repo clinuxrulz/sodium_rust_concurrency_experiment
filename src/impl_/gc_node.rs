@@ -237,9 +237,10 @@ impl GcNode {
                     (data.ref_count, data.buffered)
                 }
             );
-        if ref_count == 0 {
+        if ref_count == 0 && !buffered {
             self.free();
         } else {
+            self.with_data(|data: &mut GcNodeData| data.buffered = true);
             self.gc_ctx.possible_root(self.clone());
         }
     }

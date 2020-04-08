@@ -252,7 +252,7 @@ impl GcNode {
         });
     }
 
-    pub fn trace<'a, TRACER: FnMut(&GcNode) + 'a>(&'a self, mut tracer: TRACER) {
+    pub fn trace<TRACER: FnMut(&GcNode)>(&self, mut tracer: TRACER) {
         self.with_data(|data: &mut GcNodeData| {
             (data.trace)(&mut tracer);
         });

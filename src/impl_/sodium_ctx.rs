@@ -335,6 +335,6 @@ impl SodiumCtx {
     }
 
     pub fn collect_cycles(&self) {
-        // TODO: Execute collect_cycles in gc_node.rs
+        self.gc_ctx.collect_cycles();
     }
 }

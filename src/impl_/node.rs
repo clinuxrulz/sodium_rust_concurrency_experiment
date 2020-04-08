@@ -80,27 +80,25 @@ impl Node {
         { // trace
             let result_forward_ref = result_forward_ref.clone();
             trace = move |tracer: &mut Tracer| {
-                let node;
-                {
-                    let l = result_forward_ref.lock();
-                    let node2 = l.as_ref().unwrap();
-                    let node2: &Option<Node> = &node2;
-                    node = node2.clone().unwrap();
+                let l = result_forward_ref.lock();
+                let node2 = l.as_ref().unwrap();
+                let node2: &Option<Node> = &node2;
+                if let &Some(ref node) = node2 {
+                    let mut dependencies = Vec::new();
+                    node.with_data(|data: &mut NodeData|
+                        std::mem::swap(&mut data.dependencies, &mut &mut dependencies)
+                    );
+                    for dependency in &dependencies {
+                        let gc_node =
+                            dependency.with_data(|data: &mut NodeData|
+                                dependency.gc_node.clone()
+                            );
+                        tracer(&gc_node);
+                    }
+                    node.with_data(|data: &mut NodeData|
+                        std::mem::swap(&mut data.dependencies, &mut &mut dependencies)
+                    );
                 }
-                let mut dependencies = Vec::new();
-                node.with_data(|data: &mut NodeData|
-                    std::mem::swap(&mut data.dependencies, &mut &mut dependencies)
-                );
-                for dependency in &dependencies {
-                    let gc_node =
-                        dependency.with_data(|data: &mut NodeData|
-                            dependency.gc_node.clone()
-                        );
-                    tracer(&gc_node);
-                }
-                node.with_data(|data: &mut NodeData|
-                    std::mem::swap(&mut data.dependencies, &mut &mut dependencies)
-                );
             };
         }
         let result =

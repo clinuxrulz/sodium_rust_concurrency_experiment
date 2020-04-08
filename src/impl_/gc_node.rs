@@ -240,7 +240,10 @@ impl GcNode {
         if ref_count == 0 && !buffered {
             self.free();
         } else {
-            self.with_data(|data: &mut GcNodeData| data.buffered = true);
+            self.with_data(|data: &mut GcNodeData| {
+                data.buffered = true;
+                data.color = Color::Purple
+            });
             self.gc_ctx.possible_root(self.clone());
         }
     }

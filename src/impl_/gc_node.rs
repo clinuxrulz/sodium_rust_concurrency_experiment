@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
-pub type Tracer = dyn FnMut(&GcNode);
+pub type Tracer<'a> = dyn FnMut(&GcNode) + 'a;
 
 pub type Trace = dyn Fn(&mut Tracer) + Send + Sync;
 
-#[derive(PartialEq,Eq)]
+#[derive(PartialEq,Eq,Clone,Copy)]
 enum Color {
     Black,
     Gray,
@@ -110,7 +110,7 @@ impl GcCtx {
         }
 
         let this = self.clone();
-        node.trace(|t: &GcNode| {
+        node.trace(&mut |t: &GcNode| {
             t.with_data(|data: &mut GcNodeData| data.ref_count = data.ref_count - 1);
             this.mark_gray(t);
         });
@@ -166,7 +166,7 @@ impl GcCtx {
     }
 
     fn collect_roots(&self) {
-        let white = Vec::new();
+        let mut white = Vec::new();
         let mut roots = Vec::new();
         self.with_data(|data: &mut GcCtxData| roots.append(&mut data.roots));
         for root in roots {
@@ -252,7 +252,7 @@ impl GcNode {
         });
     }
 
-    pub fn trace<TRACER: FnMut(&GcNode) + 'static>(&self, mut tracer: TRACER) {
+    pub fn trace<'a, TRACER: FnMut(&GcNode) + 'a>(&'a self, mut tracer: TRACER) {
         self.with_data(|data: &mut GcNodeData| {
             (data.trace)(&mut tracer);
         });

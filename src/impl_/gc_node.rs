@@ -257,8 +257,13 @@ impl GcNode {
     }
 
     pub fn trace<TRACER: FnMut(&GcNode)>(&self, mut tracer: TRACER) {
+        let mut trace: Box<Trace> = Box::new(|_tracer: &mut Tracer| {});
         self.with_data(|data: &mut GcNodeData| {
-            (data.trace)(&mut tracer);
+            std::mem::swap(&mut trace, &mut data.trace);
+        });
+        trace(&mut tracer);
+        self.with_data(|data: &mut GcNodeData| {
+            std::mem::swap(&mut trace, &mut data.trace);
         });
     }
 }

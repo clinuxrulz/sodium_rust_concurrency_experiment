@@ -1,6 +1,7 @@
 mod cell_loop_test;
 mod cell_test;
 mod mem_test;
+mod node_test;
 mod stream_test;
 
 use crate::SodiumCtx;

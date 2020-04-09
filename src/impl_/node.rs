@@ -58,7 +58,7 @@ impl Drop for NodeData {
 
 impl Node {
     pub fn new<UPDATE:FnMut()+Send+'static>(sodium_ctx: &SodiumCtx, update: UPDATE, dependencies: Vec<Node>) -> Self {
-        let result_forward_ref: Arc<Mutex<Option<Node>>> = Arc::new(Mutex::new(None));
+        let result_forward_ref: Arc<Mutex<Option<WeakNode>>> = Arc::new(Mutex::new(None));
         let deconstructor;
         let trace;
         { // deconstructor
@@ -68,7 +68,7 @@ impl Node {
                 {
                     let l = result_forward_ref.lock();
                     let node2 = l.as_ref().unwrap();
-                    let node2: &Option<Node> = &node2;
+                    let node2: &Option<WeakNode> = &node2;
                     node = node2.clone().unwrap();
                 }
                 let mut dependencies = Vec::new();
@@ -89,7 +89,7 @@ impl Node {
             trace = move |tracer: &mut Tracer| {
                 let l = result_forward_ref.lock();
                 let node2 = l.as_ref().unwrap();
-                let node2: &Option<Node> = &node2;
+                let node2: &Option<WeakNode> = &node2;
                 if let &Some(ref node) = node2 {
                     let mut dependencies = Vec::new();
                     node.with_data(|data: &mut NodeData|
@@ -134,8 +134,8 @@ impl Node {
             let result = result.clone();
             let mut l = result_forward_ref.lock();
             let mut result_forward_ref = l.as_mut().unwrap();
-            let result_forward_ref: &mut Option<Node> = &mut result_forward_ref;
-            *result_forward_ref = Some(result);
+            let result_forward_ref: &mut Option<WeakNode> = &mut result_forward_ref;
+            *result_forward_ref = Some(Node::downgrade(result));
         }
         for dependency in dependencies {
             let mut l = dependency.data.lock();

@@ -74,7 +74,7 @@ impl Node {
                 let mut dependencies = Vec::new();
                 node.with_data(|data: &mut NodeData| {
                     std::mem::swap(&mut data.dependencies, &mut dependencies);
-                    data.dependents.clear();
+                    data.update_dependencies.clear();
                     data.update = Box::new(|| {});
                 });
                 for dependency in dependencies {

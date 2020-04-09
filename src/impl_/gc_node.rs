@@ -272,6 +272,7 @@ impl GcNode {
         let mut deconstructor: Box<dyn Fn()+Send+Sync> = Box::new(|| {});
         self.with_data(|data: &mut GcNodeData| {
             std::mem::swap(&mut deconstructor, &mut data.deconstructor);
+            data.trace = Box::new(|_tracer: &mut Tracer| {});
         });
         deconstructor();
     }

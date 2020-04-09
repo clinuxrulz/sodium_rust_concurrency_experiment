@@ -207,6 +207,7 @@ impl WeakNode {
     pub fn upgrade(&self) -> Option<Node> {
         let alive = self.gc_node.inc_ref_if_alive();
         if alive {
+            self.sodium_ctx.inc_node_ref_count();
             Some(Node {
                 data: self.data.clone(),
                 gc_node: self.gc_node.clone(),

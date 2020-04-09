@@ -73,7 +73,7 @@ impl Node {
                 }
                 let mut dependencies = Vec::new();
                 node.with_data(|data: &mut NodeData| {
-                    std::mem::swap(&mut data.dependencies, &mut &mut dependencies);
+                    std::mem::swap(&mut data.dependencies, &mut dependencies);
                     data.dependents.clear();
                     data.update = Box::new(|| {});
                 });
@@ -91,20 +91,32 @@ impl Node {
                 let node2 = l.as_ref().unwrap();
                 let node2: &Option<WeakNode> = &node2;
                 if let &Some(ref node) = node2 {
-                    let mut dependencies = Vec::new();
-                    node.with_data(|data: &mut NodeData|
-                        std::mem::swap(&mut data.dependencies, &mut &mut dependencies)
-                    );
-                    for dependency in &dependencies {
-                        let gc_node =
-                            dependency.with_data(|data: &mut NodeData|
-                                dependency.gc_node.clone()
-                            );
-                        tracer(&gc_node);
+                    {
+                        let mut dependencies = Vec::new();
+                        node.with_data(|data: &mut NodeData|
+                            std::mem::swap(&mut data.dependencies, &mut dependencies)
+                        );
+                        for dependency in &dependencies {
+                            let gc_node = dependency.gc_node.clone();
+                            tracer(&gc_node);
+                        }
+                        node.with_data(|data: &mut NodeData|
+                            std::mem::swap(&mut data.dependencies, &mut dependencies)
+                        );
                     }
-                    node.with_data(|data: &mut NodeData|
-                        std::mem::swap(&mut data.dependencies, &mut &mut dependencies)
-                    );
+                    {
+                        let mut update_dependencies = Vec::new();
+                        node.with_data(|data: &mut NodeData|
+                            std::mem::swap(&mut data.update_dependencies, &mut update_dependencies)
+                        );
+                        for update_dependency in &update_dependencies {
+                            let gc_node = update_dependency.gc_node.clone();
+                            tracer(&gc_node);
+                        }
+                        node.with_data(|data: &mut NodeData|
+                            std::mem::swap(&mut data.update_dependencies, &mut update_dependencies)
+                        );
+                    }
                 }
             };
         }

@@ -222,6 +222,19 @@ impl GcNode {
         k(data)
     }
 
+    pub fn inc_ref_if_alive(&self) -> bool {
+        self.with_data(
+            |data: &mut GcNodeData| {
+                if data.ref_count != 0 {
+                    data.ref_count = data.ref_count + 1;
+                    true
+                } else {
+                    false
+                }
+            }
+        )
+    }
+
     pub fn inc_ref(&self) {
         self.with_data(
             |data: &mut GcNodeData|

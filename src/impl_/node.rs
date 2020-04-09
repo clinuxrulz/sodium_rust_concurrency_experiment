@@ -19,8 +19,15 @@ pub struct NodeData {
     pub update: Box<dyn FnMut()+Send>,
     pub update_dependencies: Vec<Node>,
     pub dependencies: Vec<Node>,
-    pub dependents: Vec<Node>,
+    pub dependents: Vec<WeakNode>,
     pub keep_alive: Vec<Node>,
+    pub sodium_ctx: SodiumCtx
+}
+
+#[derive(Clone)]
+pub struct WeakNode {
+    pub data: Arc<Mutex<NodeData>>,
+    pub gc_node: GcNode,
     pub sodium_ctx: SodiumCtx
 }
 
@@ -133,7 +140,7 @@ impl Node {
         for dependency in dependencies {
             let mut l = dependency.data.lock();
             let dependency2: &mut NodeData = l.as_mut().unwrap();
-            dependency2.dependents.push(result.clone());
+            dependency2.dependents.push(Node::downgrade(result.clone()));
         }
         sodium_ctx.inc_node_ref_count();
         sodium_ctx.inc_node_count();
@@ -154,7 +161,7 @@ impl Node {
             data.dependencies.push(dependency2);
         });
         dependency.with_data(|data: &mut NodeData| {
-            data.dependents.push(self.clone());
+            data.dependents.push(Node::downgrade(self.clone()));
         });
     }
 
@@ -163,7 +170,7 @@ impl Node {
             data.dependencies.retain(|n: &Node| !Arc::ptr_eq(&n.data, &dependency.data));
         });
         dependency.with_data(|data: &mut NodeData| {
-            data.dependents.retain(|n: &Node| {
+            data.dependents.retain(|n: &WeakNode| {
                 !Arc::ptr_eq(&n.data, &self.data)
             })
         });
@@ -179,6 +186,35 @@ impl Node {
         let mut l = self.data.lock();
         let data: &mut NodeData = l.as_mut().unwrap();
         k(data)
+    }
+
+    pub fn downgrade(this: Self) -> WeakNode {
+        WeakNode {
+            data: this.data.clone(),
+            gc_node: this.gc_node.clone(),
+            sodium_ctx: this.sodium_ctx.clone()
+        }
+    }
+}
+
+impl WeakNode {
+    pub fn with_data<R,K:FnOnce(&mut NodeData)->R>(&self, k: K) -> R {
+        let mut l = self.data.lock();
+        let data: &mut NodeData = l.as_mut().unwrap();
+        k(data)
+    }
+
+    pub fn upgrade(&self) -> Option<Node> {
+        let alive = self.gc_node.inc_ref_if_alive();
+        if alive {
+            Some(Node {
+                data: self.data.clone(),
+                gc_node: self.gc_node.clone(),
+                sodium_ctx: self.sodium_ctx.clone()
+            })
+        } else {
+            None
+        }
     }
 }
 
@@ -254,7 +290,7 @@ impl fmt::Debug for Node {
                 }
             }
             write!(f, "]) (dependents [")?;
-            let dependents: Vec<Node> =
+            let dependents: Vec<WeakNode> =
                 node.with_data(|data: &mut NodeData|
                     data.dependents.clone()
                 );
@@ -266,7 +302,10 @@ impl fmt::Debug for Node {
                     } else {
                         first = false;
                     }
-                    write!(f, "{}", node_to_id(&dependent))?;
+                    let dependent = dependent.upgrade();
+                    if let Some(dependent2) = dependent {
+                        write!(f, "{}", node_to_id(&dependent2))?;
+                    }
                 }
             }
             writeln!(f, "])")?;

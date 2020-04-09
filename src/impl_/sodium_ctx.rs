@@ -1,7 +1,6 @@
 use crate::impl_::gc_node::GcCtx;
 use crate::impl_::listener::Listener;
-use crate::impl_::node::Node;
-use crate::impl_::node::NodeData;
+use crate::impl_::node::{Node, NodeData, WeakNode};
 
 use std::mem;
 use std::sync::Arc;
@@ -166,8 +165,9 @@ impl SodiumCtx {
             node.with_data(|data2: &mut NodeData| {
                 data2.dependents
                     .iter()
-                    .for_each(|node: &Node| {
-                        data.changed_nodes.push(node.clone());
+                    .flat_map(|node: &WeakNode| node.upgrade())
+                    .for_each(|node: Node| {
+                        data.changed_nodes.push(node);
                     });
             });
         });
@@ -328,7 +328,9 @@ impl SodiumCtx {
                 let dependents = dependents.clone();
                 let _self = self.clone();
                 for dependent in dependents {
-                    _self.update_node(&dependent);
+                    if let Some(dependent2) = dependent.upgrade() {
+                        _self.update_node(&dependent2);
+                    }
                 }
             }
         }

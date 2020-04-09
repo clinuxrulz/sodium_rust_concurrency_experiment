@@ -26,7 +26,6 @@ fn node_mem_1() {
             );
         node1.add_dependency(node3);
     }
-    sodium_ctx.collect_cycles();
     assert_memory_freed(&sodium_ctx);
 }
 

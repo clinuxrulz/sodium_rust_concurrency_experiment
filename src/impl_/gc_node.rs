@@ -238,6 +238,7 @@ impl GcNode {
             |data: &mut GcNodeData| {
                 if data.ref_count != 0 {
                     data.ref_count = data.ref_count + 1;
+                    data.color = Color::Black;
                     true
                 } else {
                     false
@@ -248,8 +249,10 @@ impl GcNode {
 
     pub fn inc_ref(&self) {
         self.with_data(
-            |data: &mut GcNodeData|
-                data.ref_count = data.ref_count + 1
+            |data: &mut GcNodeData| {
+                data.ref_count = data.ref_count + 1;
+                data.color = Color::Black;
+            }
         );
     }
 
@@ -261,8 +264,13 @@ impl GcNode {
                     (data.ref_count, data.buffered)
                 }
             );
-        if ref_count == 0 && !buffered {
-            self.free();
+        if ref_count == 0 {
+            self.with_data(|data: &mut GcNodeData| {
+                data.color = Color::Black;
+            });
+            if !buffered {
+                self.free();
+            }
         } else {
             self.with_data(|data: &mut GcNodeData| {
                 data.buffered = true;

@@ -345,14 +345,12 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn _listen<K:IsLambda1<A,()>+Send+'static>(&self, mut k: K, weak: bool) -> Listener {
-        let self_ = self.clone();//Stream::downgrade(self);
+        let self_ = Stream::downgrade(self);
         let node =
             Node::new(
                 &self.sodium_ctx(),
                 move || {
-                    //let self_op = self_.upgrade();
-                    //assert!(self_op.is_some());
-                    //let self_ = self_op.unwrap();
+                    let self_ = self_.upgrade().unwrap();
                     self_.with_data(|data: &mut StreamData<A>| {
                         for firing in &data.firing_op {
                             k.call(firing)
@@ -361,7 +359,6 @@ impl<A:Send+'static> Stream<A> {
                 },
                 vec![self.node()]
             );
-        node.add_update_dependencies(vec![self.node()]);
         Listener::new(&self.sodium_ctx(), weak, node)
     }
 

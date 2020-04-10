@@ -269,7 +269,7 @@ impl SodiumCtx {
             k();
         }
         // gc
-        //self.collect_cycles()
+        self.collect_cycles()
     }
 
     pub fn update_node(&self, node: &Node) {

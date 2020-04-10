@@ -17,7 +17,7 @@ pub struct NodeData {
     pub visited: bool,
     pub changed: bool,
     pub update: Box<dyn FnMut()+Send>,
-    pub update_dependencies: Vec<WeakNode>,
+    pub update_dependencies: Vec<Node>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>,
     pub keep_alive: Vec<Node>,
@@ -164,7 +164,7 @@ impl Node {
     pub fn add_update_dependencies(&self, update_dependencies: Vec<Node>) {
         self.with_data(move |data: &mut NodeData| {
             for dep in update_dependencies {
-                data.update_dependencies.push(Node::downgrade(dep));
+                data.update_dependencies.push(dep);
             }
         });
     }

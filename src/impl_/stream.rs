@@ -148,9 +148,7 @@ impl<A:Send+'static> Stream<A> {
                 let node = Node::new(
                     &sodium_ctx,
                     move || {
-                        let self_op = self_.upgrade();
-                        assert!(self_op.is_some());
-                        let self_ = self_op.unwrap();
+                        let self_ = self_.upgrade().unwrap();
                         self_.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
                                 _s._send(f.call(firing));

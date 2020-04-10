@@ -8,8 +8,9 @@ fn mem() {
     let sodium_ctx = &sodium_ctx;
     {
         let s = sodium_ctx.new_stream::<i32>();
-        //let s2 = s.map_to(5);
-        let l = s.listen_weak(|_:&i32| {});
+        let s2 = s.map_to(5);
+        let s3 = s2.map_to(3);
+        //let l = s2.listen_weak(|_:&i32| {});
     }
     sodium_ctx.impl_.collect_cycles();
     let node_count = sodium_ctx.impl_.node_count();

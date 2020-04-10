@@ -1,6 +1,5 @@
 use crate::impl_::cell::Cell;
-use crate::impl_::node::Node;
-use crate::impl_::node::NodeData;
+use crate::impl_::node::{Node, NodeData, WeakNode};
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::sodium_ctx::SodiumCtx;
@@ -16,16 +15,19 @@ use std::sync::Mutex;
 use std::sync::Weak;
 
 pub struct Stream<A> {
+    pub node: Node,
     pub data: Arc<Mutex<StreamData<A>>>
 }
 
 pub struct WeakStream<A> {
+    pub node: WeakNode,
     pub data: Weak<Mutex<StreamData<A>>>
 }
 
 impl<A> Clone for Stream<A> {
     fn clone(&self) -> Self {
         Stream {
+            node: self.node.clone(),
             data: self.data.clone()
         }
     }
@@ -34,6 +36,7 @@ impl<A> Clone for Stream<A> {
 impl<A> Clone for WeakStream<A> {
     fn clone(&self) -> Self {
         WeakStream {
+            node: self.node.clone(),
             data: self.data.clone()
         }
     }
@@ -41,7 +44,6 @@ impl<A> Clone for WeakStream<A> {
 
 pub struct StreamData<A> {
     pub firing_op: Option<A>,
-    pub node: Node,
     pub sodium_ctx: SodiumCtx,
     pub coalescer_op: Option<Box<dyn FnMut(&A,&A)->A+Send>>
 }
@@ -70,9 +72,9 @@ impl<A:Send+'static> Stream<A> {
 
     pub fn _new_with_coalescer<COALESCER:FnMut(&A,&A)->A+Send+'static>(sodium_ctx: &SodiumCtx, coalescer: COALESCER) -> Stream<A> {
         Stream {
+            node: sodium_ctx.null_node(),
             data: Arc::new(Mutex::new(StreamData {
                 firing_op: None,
-                node: sodium_ctx.null_node(),
                 sodium_ctx: sodium_ctx.clone(),
                 coalescer_op: Some(Box::new(coalescer))
             })),
@@ -80,16 +82,16 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn _new<MkNode:FnOnce(&Stream<A>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MkNode) -> Stream<A> {
-        let s = Stream {
+        let mut s = Stream {
+            node: sodium_ctx.null_node(),
             data: Arc::new(Mutex::new(StreamData {
                 firing_op: None,
-                node: sodium_ctx.null_node(),
                 sodium_ctx: sodium_ctx.clone(),
                 coalescer_op: None
             }))
         };
         let node = mk_node(&s);
-        s.with_data(|data: &mut StreamData<A>| data.node = node.clone());
+        s.node = node.clone();
         let mut update: Box<dyn FnMut()+Send> = Box::new(|| {});
         node.with_data(|data: &mut NodeData| {
             mem::swap(&mut update, &mut data.update);
@@ -99,21 +101,13 @@ impl<A:Send+'static> Stream<A> {
             mem::swap(&mut update, &mut data.update);
         });
         let is_firing =
-            s.with_data(|data: &mut StreamData<A>| {
-                if data.firing_op.is_some() {
-                    data.node.with_data(|data: &mut NodeData| data.changed = true);
-                    true
-                } else {
-                    false
-                }
-            });
+            s.with_data(|data: &mut StreamData<A>| data.firing_op.is_some());
         if is_firing {
+            s.node().with_data(|data: &mut NodeData| data.changed = true);
             let s = s.clone();
             sodium_ctx.pre_post(move || {
-                s.with_data(|data: &mut StreamData<A>| {
-                    data.firing_op = None;
-                    data.node.with_data(|data: &mut NodeData| data.changed = false)
-                })
+                s.with_data(|data: &mut StreamData<A>| data.firing_op = None);
+                s.node.with_data(|data: &mut NodeData| data.changed = false);
             });
         }
         s
@@ -124,7 +118,7 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn node(&self) -> Node {
-        self.with_data(|data: &mut StreamData<A>| data.node.clone())
+        self.node.clone()
     }
 
     pub fn sodium_ctx(&self) -> SodiumCtx {
@@ -351,14 +345,14 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn _listen<K:IsLambda1<A,()>+Send+'static>(&self, mut k: K, weak: bool) -> Listener {
-        let self_ = Stream::downgrade(self);
+        let self_ = self.clone();//Stream::downgrade(self);
         let node =
             Node::new(
                 &self.sodium_ctx(),
                 move || {
-                    let self_op = self_.upgrade();
-                    assert!(self_op.is_some());
-                    let self_ = self_op.unwrap();
+                    //let self_op = self_.upgrade();
+                    //assert!(self_op.is_some());
+                    //let self_ = self_op.unwrap();
                     self_.with_data(|data: &mut StreamData<A>| {
                         for firing in &data.firing_op {
                             k.call(firing)
@@ -367,6 +361,7 @@ impl<A:Send+'static> Stream<A> {
                 },
                 vec![self.node()]
             );
+        node.add_update_dependencies(vec![self.node()]);
         Listener::new(&self.sodium_ctx(), weak, node)
     }
 
@@ -400,20 +395,14 @@ impl<A:Send+'static> Stream<A> {
                 } else {
                     data.firing_op = Some(a);
                 }
-                data.node.with_data(|data: &mut NodeData| {
-                    data.changed = true;
-                });
                 is_first
             });
+            self.node.with_data(|data: &mut NodeData| data.changed = true);
             if is_first {
                 let _self = self.clone();
                 sodium_ctx.pre_post(move || {
-                    _self.with_data(|data: &mut StreamData<A>| {
-                        data.firing_op = None;
-                        data.node.with_data(|data: &mut NodeData| {
-                            data.changed = false;
-                        });
-                    });
+                    _self.with_data(|data: &mut StreamData<A>| data.firing_op = None);
+                    _self.node.with_data(|data: &mut NodeData| data.changed = false);
                 });
             }
         });
@@ -421,6 +410,7 @@ impl<A:Send+'static> Stream<A> {
 
     pub fn downgrade(this: &Self) -> WeakStream<A> {
         WeakStream {
+            node: Node::downgrade(&this.node),
             data: Arc::downgrade(&this.data)
         }
     }
@@ -428,6 +418,13 @@ impl<A:Send+'static> Stream<A> {
 
 impl<A> WeakStream<A> {
     pub fn upgrade(&self) -> Option<Stream<A>> {
-        self.data.upgrade().map(|data| Stream { data })
+        let node_op = self.node.upgrade();
+        let data_op = self.data.upgrade();
+        if let Some(node) = node_op {
+            if let Some(data) = data_op {
+                return Some(Stream { node, data })                
+            }
+        }
+        None
     }
 }

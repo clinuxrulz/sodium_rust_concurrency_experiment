@@ -17,7 +17,7 @@ pub struct NodeData {
     pub visited: bool,
     pub changed: bool,
     pub update: Box<dyn FnMut()+Send>,
-    pub update_dependencies: Vec<Node>,
+    pub update_dependencies: Vec<WeakNode>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>,
     pub keep_alive: Vec<Node>,
@@ -46,9 +46,7 @@ impl Clone for Node {
 impl Drop for Node {
     fn drop(&mut self) {
         self.sodium_ctx.dec_node_ref_count();
-        if self.gc_node.ref_count() != 0 {
-            self.gc_node.dec_ref();
-        }
+        self.gc_node.dec_ref();
     }
 }
 
@@ -149,12 +147,12 @@ impl Node {
             let mut l = result_forward_ref.lock();
             let mut result_forward_ref = l.as_mut().unwrap();
             let result_forward_ref: &mut Option<WeakNode> = &mut result_forward_ref;
-            *result_forward_ref = Some(Node::downgrade(result));
+            *result_forward_ref = Some(Node::downgrade(&result));
         }
         for dependency in dependencies {
             let mut l = dependency.data.lock();
             let dependency2: &mut NodeData = l.as_mut().unwrap();
-            dependency2.dependents.push(Node::downgrade(result.clone()));
+            dependency2.dependents.push(Node::downgrade(&result));
         }
         sodium_ctx.inc_node_ref_count();
         sodium_ctx.inc_node_count();
@@ -164,7 +162,7 @@ impl Node {
     pub fn add_update_dependencies(&self, update_dependencies: Vec<Node>) {
         self.with_data(move |data: &mut NodeData| {
             for dep in update_dependencies {
-                data.update_dependencies.push(dep);
+                data.update_dependencies.push(Node::downgrade(&dep));
             }
         });
     }
@@ -175,7 +173,7 @@ impl Node {
             data.dependencies.push(dependency2);
         });
         dependency.with_data(|data: &mut NodeData| {
-            data.dependents.push(Node::downgrade(self.clone()));
+            data.dependents.push(Node::downgrade(self));
         });
     }
 
@@ -202,7 +200,7 @@ impl Node {
         k(data)
     }
 
-    pub fn downgrade(this: Self) -> WeakNode {
+    pub fn downgrade(this: &Self) -> WeakNode {
         WeakNode {
             data: this.data.clone(),
             gc_node: this.gc_node.clone(),

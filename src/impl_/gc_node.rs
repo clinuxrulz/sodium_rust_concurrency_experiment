@@ -47,7 +47,7 @@ impl GcCtx {
         }
     }
 
-    pub fn with_data<R,K:FnOnce(&mut GcCtxData)->R>(&self, mut k:K) -> R {
+    fn with_data<R,K:FnOnce(&mut GcCtxData)->R>(&self, mut k:K) -> R {
         let mut l = self.data.lock();
         let data = l.as_mut().unwrap();
         k(data)
@@ -71,8 +71,8 @@ impl GcCtx {
         );
         let mut new_roots: Vec<GcNode> = Vec::new();
         for root in old_roots {
-            let color = root.with_data(|data: &mut GcNodeData| data.color);
-            if color == Color::Purple {
+            let (color,ref_count) = root.with_data(|data: &mut GcNodeData| (data.color, data.ref_count));
+            if color == Color::Purple && ref_count != 0 {
                 self.mark_gray(&root);
                 new_roots.push(root);
             } else {
@@ -223,7 +223,7 @@ impl GcNode {
         }
     }
 
-    fn with_data<R,K:FnOnce(&mut GcNodeData)->R>(&self, mut k: K)->R {
+    fn with_data<R,K:FnOnce(&mut GcNodeData)->R>(&self, k: K)->R {
         let mut l = self.data.lock();
         let data = l.as_mut().unwrap();
         k(data)

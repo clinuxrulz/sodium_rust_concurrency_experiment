@@ -223,10 +223,14 @@ impl GcNode {
         }
     }
 
-    pub fn with_data<R,K:FnOnce(&mut GcNodeData)->R>(&self, mut k: K)->R {
+    fn with_data<R,K:FnOnce(&mut GcNodeData)->R>(&self, mut k: K)->R {
         let mut l = self.data.lock();
         let data = l.as_mut().unwrap();
         k(data)
+    }
+
+    pub fn ref_count(&self) -> u32 {
+        self.with_data(|data: &mut GcNodeData| data.ref_count)
     }
 
     pub fn inc_ref_if_alive(&self) -> bool {

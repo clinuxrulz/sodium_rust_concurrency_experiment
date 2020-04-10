@@ -17,7 +17,7 @@ pub struct NodeData {
     pub visited: bool,
     pub changed: bool,
     pub update: Box<dyn FnMut()+Send>,
-    pub update_dependencies: Vec<Node>,
+    pub update_dependencies: Vec<WeakNode>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>,
     pub keep_alive: Vec<Node>,
@@ -46,7 +46,9 @@ impl Clone for Node {
 impl Drop for Node {
     fn drop(&mut self) {
         self.sodium_ctx.dec_node_ref_count();
-        self.gc_node.dec_ref();
+        if self.gc_node.ref_count() != 0 {
+            self.gc_node.dec_ref();
+        }
     }
 }
 
@@ -162,7 +164,7 @@ impl Node {
     pub fn add_update_dependencies(&self, update_dependencies: Vec<Node>) {
         self.with_data(move |data: &mut NodeData| {
             for dep in update_dependencies {
-                data.update_dependencies.push(dep);
+                data.update_dependencies.push(Node::downgrade(dep));
             }
         });
     }

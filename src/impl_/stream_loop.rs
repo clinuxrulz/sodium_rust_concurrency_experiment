@@ -43,12 +43,11 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
             data.looped = true;
             let node = data.stream.node();
             node.add_dependency(s.node());
-            let s = s.clone();// Stream::downgrade(&s);
+            let s = s.clone();
             node.add_update_dependencies(vec![s.node(), node.clone()]);
             let s_out = data.stream.clone();
             node.with_data(|data: &mut NodeData| {
                 data.update = Box::new(move || {
-                    //let s = s.upgrade().unwrap();
                     s.with_firing_op(|firing_op: &mut Option<A>| {
                         if let Some(ref firing) = firing_op {
                             s_out._send(firing.clone());

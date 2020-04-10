@@ -72,7 +72,7 @@ impl GcCtx {
         let mut new_roots: Vec<GcNode> = Vec::new();
         for root in old_roots {
             let (color,ref_count) = root.with_data(|data: &mut GcNodeData| (data.color, data.ref_count));
-            if color == Color::Purple && ref_count != 0 {
+            if color == Color::Purple {
                 self.mark_gray(&root);
                 new_roots.push(root);
             } else {

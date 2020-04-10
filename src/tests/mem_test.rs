@@ -3,12 +3,12 @@ use crate::SodiumCtx;
 use crate::StreamSink;
 
 #[test]
-fn stream_mem() {
+fn mem() {
     let sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &sodium_ctx;
     {
         let s = sodium_ctx.new_stream::<i32>();
-        let s2 = s.map_to(5);
+        //let s2 = s.map_to(5);
     }
     sodium_ctx.impl_.collect_cycles();
     let node_count = sodium_ctx.impl_.node_count();

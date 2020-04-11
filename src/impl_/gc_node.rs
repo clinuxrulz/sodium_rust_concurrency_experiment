@@ -220,15 +220,6 @@ impl GcCtx {
 
     fn collect_white(&self, s: &GcNode, white: &mut Vec<GcNode>) {
         if s.with_data(|data: &mut GcNodeData| data.color == Color::White && !data.buffered) {
-            /*
-            // must increase the reference count again which is against the paper,
-            // but the deconstructor (drop) will decrement it cause a negative reference count
-            // if we do not increment here
-            trace!("collect_white: gc node {} inc ref count", s.id);
-            s.with_data(|data: &mut GcNodeData| {
-                data.ref_count = data.ref_count + 1;
-            });*/
-            //
             s.with_data(|data: &mut GcNodeData| data.color = Color::Black);
             let this = self.clone();
             s.trace(|t| {

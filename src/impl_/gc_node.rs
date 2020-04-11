@@ -15,6 +15,7 @@ enum Color {
 
 #[derive(Clone)]
 pub struct GcNode {
+    id: u32,
     gc_ctx: GcCtx,
     data: Arc<Mutex<GcNodeData>>
 }
@@ -33,6 +34,7 @@ pub struct GcCtx {
 }
 
 struct GcCtxData {
+    next_id: u32,
     roots: Vec<GcNode>,
     to_be_freed: Vec<GcNode>
 }
@@ -41,6 +43,7 @@ impl GcCtx {
     pub fn new() -> GcCtx {
         GcCtx {
             data: Arc::new(Mutex::new(GcCtxData {
+                next_id: 0,
                 roots: Vec::new(),
                 to_be_freed: Vec::new()
             }))
@@ -51,6 +54,14 @@ impl GcCtx {
         let mut l = self.data.lock();
         let data = l.as_mut().unwrap();
         k(data)
+    }
+
+    pub fn make_id(&self) -> u32 {
+        self.with_data(|data: &mut GcCtxData| {
+            let id = data.next_id;
+            data.next_id = data.next_id + 1;
+            id
+        })
     }
 
     pub fn possible_root(&self, node: GcNode) {
@@ -113,12 +124,16 @@ impl GcCtx {
             return;
         }
 
+        trace!("mark_gray: start: visiting children of gc node {}", node.id);
+
         let this = self.clone();
         node.trace(&mut |t: &GcNode| {
-            trace!("mark_gray: gc node {:p} dec ref count", t.data);
+            trace!("mark_gray: gc node {} dec ref count", t.id);
             t.with_data(|data: &mut GcNodeData| data.ref_count = data.ref_count - 1);
             this.mark_gray(t);
         });
+
+        trace!("mark_gray: end: visting children of gc node {}", node.id);
     }
 
     fn scan_roots(&self) {
@@ -161,7 +176,7 @@ impl GcCtx {
         s.with_data(|data: &mut GcNodeData| data.color = Color::Black);
         let this = self.clone();
         s.trace(|t| {
-            trace!("scan_black: gc node {:p} dec ref count", t.data);
+            trace!("scan_black: gc node {} dec ref count", t.id);
             let color =
                 t.with_data(|data: &mut GcNodeData| {
                     data.ref_count = data.ref_count + 1;
@@ -182,12 +197,18 @@ impl GcCtx {
             self.collect_white(&root, &mut white);
         }
         for i in white {
-            i.free();
+            if i.ref_count() == 1 {
+                trace!("collect_roots: freeing white node {}", i.id);
+                i.free();
+            }
         }
         let mut to_be_freed = Vec::new();
         self.with_data(|data: &mut GcCtxData| to_be_freed.append(&mut data.to_be_freed));
         for i in to_be_freed {
-            i.free();
+            if i.ref_count() == 1 {
+                trace!("collect_roots: freeing to_be_freed node {}", i.id);
+                i.free();
+            }
         }
     }
 
@@ -200,7 +221,7 @@ impl GcCtx {
                 // must increase the reference count again which is against the paper,
                 // but the deconstructor (drop) will decrement it cause a negative reference count
                 // if we do not increment here
-                trace!("collect_white: gc node {:p} inc ref count", s.data);
+                trace!("collect_white: gc node {} inc ref count", s.id);
                 t.with_data(|data: &mut GcNodeData| {
                     data.ref_count = data.ref_count + 1;
                 });
@@ -221,6 +242,7 @@ impl GcNode {
         trace: TRACE
     ) -> GcNode {
         GcNode {
+            id: gc_ctx.make_id(),
             gc_ctx: gc_ctx.clone(),
             data: Arc::new(Mutex::new(GcNodeData {
                 ref_count: 1,

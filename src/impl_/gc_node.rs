@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::sync::Mutex;
-use log;
 
 pub type Tracer<'a> = dyn FnMut(&GcNode) + 'a;
 
@@ -59,13 +58,15 @@ impl GcCtx {
     }
 
     pub fn collect_cycles(&self) {
-        log::trace!("collect_cycles");
+        trace!("start: collect_cycles");
         self.mark_roots();
         self.scan_roots();
         self.collect_roots();
+        trace!("end: collect_cycles");
     }
 
     fn mark_roots(&self) {
+        trace!("start: mark_roots");
         let mut old_roots: Vec<GcNode> = Vec::new();
         self.with_data(
             |data: &mut GcCtxData|
@@ -97,6 +98,7 @@ impl GcCtx {
             |data: &mut GcCtxData|
                 std::mem::swap(&mut new_roots, &mut data.roots)
         );
+        trace!("end: mark_roots");
     }
 
     fn mark_gray(&self, node: &GcNode) {
@@ -113,12 +115,14 @@ impl GcCtx {
 
         let this = self.clone();
         node.trace(&mut |t: &GcNode| {
+            trace!("mark_gray: gc node {:p} dec ref count", t.data);
             t.with_data(|data: &mut GcNodeData| data.ref_count = data.ref_count - 1);
             this.mark_gray(t);
         });
     }
 
     fn scan_roots(&self) {
+        trace!("start: scan_roots");
         let mut roots = Vec::new();
         self.with_data(
             |data: &mut GcCtxData|
@@ -131,6 +135,7 @@ impl GcCtx {
             |data: &mut GcCtxData|
                 std::mem::swap(&mut roots, &mut data.roots)
         );
+        trace!("end: scan_roots");
     }
 
     fn scan(&self, s: &GcNode) {
@@ -156,6 +161,7 @@ impl GcCtx {
         s.with_data(|data: &mut GcNodeData| data.color = Color::Black);
         let this = self.clone();
         s.trace(|t| {
+            trace!("scan_black: gc node {:p} dec ref count", t.data);
             let color =
                 t.with_data(|data: &mut GcNodeData| {
                     data.ref_count = data.ref_count + 1;
@@ -187,16 +193,17 @@ impl GcCtx {
 
     fn collect_white(&self, s: &GcNode, white: &mut Vec<GcNode>) {
         if s.with_data(|data: &mut GcNodeData| data.color == Color::White && !data.buffered) {
-            // must increase the reference count again which is against the paper,
-            // but the deconstructor (drop) will decrement it cause a negative reference count
-            // if we do not increment here
-            s.with_data(|data: &mut GcNodeData| {
-                data.ref_count = data.ref_count + 1;
-            });
             //
             s.with_data(|data: &mut GcNodeData| data.color = Color::Black);
             let this = self.clone();
             s.trace(|t| {
+                // must increase the reference count again which is against the paper,
+                // but the deconstructor (drop) will decrement it cause a negative reference count
+                // if we do not increment here
+                trace!("collect_white: gc node {:p} inc ref count", s.data);
+                t.with_data(|data: &mut GcNodeData| {
+                    data.ref_count = data.ref_count + 1;
+                });
                 this.collect_white(t, white);
             });
             white.push(s.clone());

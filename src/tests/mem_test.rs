@@ -6,7 +6,7 @@ use crate::tests::init;
 
 use log;
 
-// SET RUST_LOG=info
+// SET RUST_LOG=trace
 #[test]
 fn log_test() {
     init();
@@ -17,6 +17,7 @@ fn log_test() {
 
 #[test]
 fn mem() {
+    init();
     let sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &sodium_ctx;
     {

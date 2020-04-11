@@ -1,9 +1,11 @@
 
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::node::Node;
+use crate::tests::init;
 
 #[test]
 fn node_mem_1() {
+    init();
     let sodium_ctx = SodiumCtx::new();
     {
         let node1 =

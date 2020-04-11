@@ -24,9 +24,16 @@ pub struct WeakStream<A> {
 
 impl<A> Clone for Stream<A> {
     fn clone(&self) -> Self {
+        self.node().gc_node.inc_ref();
         Stream {
             data: self.data.clone()
         }
+    }
+}
+
+impl<A> Drop for Stream<A> {
+    fn drop(&mut self) {
+        self.node().gc_node.dec_ref();
     }
 }
 
@@ -419,7 +426,9 @@ impl<A> WeakStream<A> {
     pub fn upgrade(&self) -> Option<Stream<A>> {
         let data_op = self.data.upgrade();
         if let Some(data) = data_op {
-            return Some(Stream { data });
+            let s = Stream { data };
+            s.node().gc_node.inc_ref();
+            return Some(s);
         }
         None
     }

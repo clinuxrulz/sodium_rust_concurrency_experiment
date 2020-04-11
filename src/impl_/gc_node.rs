@@ -124,16 +124,12 @@ impl GcCtx {
             return;
         }
 
-        trace!("mark_gray: start: visiting children of gc node {}", node.id);
-
         let this = self.clone();
         node.trace(&mut |t: &GcNode| {
             trace!("mark_gray: gc node {} dec ref count", t.id);
             t.with_data(|data: &mut GcNodeData| data.ref_count = data.ref_count - 1);
             this.mark_gray(t);
         });
-
-        trace!("mark_gray: end: visting children of gc node {}", node.id);
     }
 
     fn scan_roots(&self) {

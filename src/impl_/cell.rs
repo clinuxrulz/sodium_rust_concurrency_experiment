@@ -1,6 +1,6 @@
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
-use crate::impl_::node::{Node, NodeData, WeakNode};
+use crate::impl_::node::{Node, NodeData};
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
 use crate::impl_::stream::Stream;
@@ -19,38 +19,50 @@ use std::sync::Mutex;
 use std::sync::Weak;
 
 pub struct Cell<A> {
-    stream: Stream<A>,
-    node: Node,
     data: Arc<Mutex<CellData<A>>>,
 }
 
 pub struct WeakCell<A> {
-    stream: WeakStream<A>,
-    node: WeakNode,
     data: Weak<Mutex<CellData<A>>>
 }
 
 impl<A> Clone for Cell<A> {
     fn clone(&self) -> Self {
         Cell {
-            stream: self.stream.clone(),
-            node: self.node.clone(),
             data: self.data.clone()
         }
     }
 }
 
 pub struct CellData<A> {
+    node: Node,
+    stream: Stream<A>,
     value: Lazy<A>,
     next_value_op: Option<A>
+}
+
+impl<A> Cell<A> {
+    pub fn with_data<R,K:FnOnce(&mut CellData<A>)->R>(&self, k: K) -> R {
+        let mut l = self.data.lock();
+        let data: &mut CellData<A> = l.as_mut().unwrap();
+        k(data)
+    }
+
+    pub fn sodium_ctx(&self) -> SodiumCtx {
+        self.with_data(|data: &mut CellData<A>| data.stream.sodium_ctx())
+    }
+
+    pub fn node(&self) -> Node {
+        self.with_data(|data: &mut CellData<A>| data.node.clone())
+    }
 }
 
 impl<A:Send+'static> Cell<A> {
     pub fn new(sodium_ctx: &SodiumCtx, value: A) -> Cell<A> where A: Clone {
         Cell {
-            stream: Stream::new(sodium_ctx),
-            node: sodium_ctx.null_node(),
             data: Arc::new(Mutex::new(CellData {
+                node: sodium_ctx.null_node(),
+                stream: Stream::new(sodium_ctx),
                 value: Lazy::of_value(value),
                 next_value_op: None,
             }))
@@ -69,9 +81,9 @@ impl<A:Send+'static> Cell<A> {
                 }
             });
         let mut c = Cell {
-            stream: stream.clone(),
-            node: sodium_ctx.null_node(),
             data: Arc::new(Mutex::new(CellData {
+                node: sodium_ctx.null_node(),
+                stream: stream.clone(),
                 value: init_value,
                 next_value_op: None,
             }))
@@ -112,16 +124,8 @@ impl<A:Send+'static> Cell<A> {
             );
             node.add_update_dependencies(vec![node.clone()]);
         }
-        c.node = node;
+        c.with_data(|data: &mut CellData<A>| data.node = node);
         c
-    }
-
-    pub fn sodium_ctx(&self) -> SodiumCtx {
-        self.stream.sodium_ctx()
-    }
-
-    pub fn node(&self) -> Node {
-        self.node.clone()
     }
 
     pub fn sample(&self) -> A where A: Clone {
@@ -133,7 +137,7 @@ impl<A:Send+'static> Cell<A> {
     }
 
     pub fn updates(&self) -> Stream<A> {
-        self.stream.clone()
+        self.with_data(|data: &mut CellData<A>| data.stream.clone())
     }
 
     pub fn value(&self) -> Stream<A> where A: Clone {
@@ -455,16 +459,8 @@ impl<A:Send+'static> Cell<A> {
         })
     }
 
-    pub fn with_data<R,K:FnOnce(&mut CellData<A>)->R>(&self, k: K) -> R {
-        let mut l = self.data.lock();
-        let data: &mut CellData<A> = l.as_mut().unwrap();
-        k(data)
-    }
-
     pub fn downgrade(this: &Self) -> WeakCell<A> {
         WeakCell {
-            stream: Stream::downgrade(&this.stream),
-            node: Node::downgrade(&this.node),
             data: Arc::downgrade(&this.data)
         }
     }
@@ -472,12 +468,8 @@ impl<A:Send+'static> Cell<A> {
 
 impl<A> WeakCell<A> {
     pub fn upgrade(&self) -> Option<Cell<A>> {
-        if let Some(stream) = self.stream.upgrade() {
-            if let Some(node) = self.node.upgrade() {
-                if let Some(data) = self.data.upgrade() {
-                    return Some(Cell { stream, node, data });
-                }
-            }
+        if let Some(data) = self.data.upgrade() {
+            return Some(Cell { data });
         }
         None
     }

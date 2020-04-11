@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::Mutex;
+use log;
 
 pub type Tracer<'a> = dyn FnMut(&GcNode) + 'a;
 
@@ -58,6 +59,7 @@ impl GcCtx {
     }
 
     pub fn collect_cycles(&self) {
+        log::trace!("collect_cycles");
         self.mark_roots();
         self.scan_roots();
         self.collect_roots();

@@ -6,6 +6,10 @@ mod stream_test;
 
 use crate::SodiumCtx;
 
+fn init() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+
 pub fn assert_memory_freed(sodium_ctx: &SodiumCtx) {
     sodium_ctx.impl_.collect_cycles();
     let node_count = sodium_ctx.impl_.node_count();

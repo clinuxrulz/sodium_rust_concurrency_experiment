@@ -2,6 +2,19 @@ use crate::CellSink;
 use crate::SodiumCtx;
 use crate::StreamSink;
 
+use crate::tests::init;
+
+use log;
+
+// SET RUST_LOG=info
+#[test]
+fn log_test() {
+    init();
+    info!("a");
+    log::debug!("a");
+    log::debug!("b");
+}
+
 #[test]
 fn mem() {
     let sodium_ctx = SodiumCtx::new();

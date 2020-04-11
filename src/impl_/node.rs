@@ -17,7 +17,7 @@ pub struct NodeData {
     pub visited: bool,
     pub changed: bool,
     pub update: Box<dyn FnMut()+Send>,
-    pub update_dependencies: Vec<WeakNode>,
+    pub update_dependencies: Vec<GcNode>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>,
     pub keep_alive: Vec<Node>,
@@ -110,8 +110,7 @@ impl Node {
                             std::mem::swap(&mut data.update_dependencies, &mut update_dependencies)
                         );
                         for update_dependency in &update_dependencies {
-                            let gc_node = update_dependency.gc_node.clone();
-                            tracer(&gc_node);
+                            tracer(update_dependency);
                         }
                         node.with_data(|data: &mut NodeData|
                             std::mem::swap(&mut data.update_dependencies, &mut update_dependencies)
@@ -159,10 +158,10 @@ impl Node {
         return result;
     }
 
-    pub fn add_update_dependencies(&self, update_dependencies: Vec<Node>) {
+    pub fn add_update_dependencies(&self, update_dependencies: Vec<GcNode>) {
         self.with_data(move |data: &mut NodeData| {
             for dep in update_dependencies {
-                data.update_dependencies.push(Node::downgrade(&dep));
+                data.update_dependencies.push(dep);
             }
         });
     }

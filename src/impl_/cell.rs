@@ -122,7 +122,7 @@ impl<A:Send+'static> Cell<A> {
                 },
                 vec![stream.node()]
             );
-            node.add_update_dependencies(vec![node.clone()]);
+            node.add_update_dependencies(vec![node.gc_node.clone()]);
         }
         c.with_data(|data: &mut CellData<A>| data.node = node);
         c
@@ -363,7 +363,7 @@ impl<A:Send+'static> Cell<A> {
                         vec![csa2.updates().node()]
                     );
                 }
-                node2.add_update_dependencies(vec![node1.clone()]);
+                node2.add_update_dependencies(vec![node1.gc_node.clone()]);
                 node1.add_keep_alive(&node2);
                 return node1;
             }
@@ -423,7 +423,7 @@ impl<A:Send+'static> Cell<A> {
                         });
                     };
                 }
-                node1.add_update_dependencies(vec![node1.clone(), node2.clone()]);
+                node1.add_update_dependencies(vec![node1.gc_node.clone(), node2.gc_node.clone()]);
                 node1.with_data(|data: &mut NodeData| data.update = Box::new(node1_update));
                 {
                     let last_inner_s = last_inner_s.clone();

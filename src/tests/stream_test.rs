@@ -593,7 +593,7 @@ fn switch_c() {
         let ca = ssc.stream().map(|s: &SC| s.a.clone()).filter_option().hold("A");
         let cb = ssc.stream().map(|s: &SC| s.b.clone()).filter_option().hold("a");
         let csw_str = ssc.stream().map(|s: &SC| s.sw.clone()).filter_option().hold("ca");
-        let csw_deps = vec![ca.node(), cb.node()];
+        let csw_deps = vec![ca.node().gc_node.clone(), cb.node().gc_node.clone()];
         let csw = csw_str.map(
             lambda1(
                 move |s: &&'static str|
@@ -664,7 +664,7 @@ fn switch_s() {
                 )
                 .filter_option()
                 .hold("sa");
-        let csw_deps = vec![sa.node(), sb.node()];
+        let csw_deps = vec![sa.node().gc_node.clone(), sb.node().gc_node.clone()];
         let csw: Cell<Stream<&'static str>> = csw_str.map(
             lambda1(
                 move |sw: &&'static str|

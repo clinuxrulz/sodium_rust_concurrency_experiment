@@ -1,4 +1,5 @@
 use crate::cell::Cell;
+use crate::impl_::gc_node::GcNode;
 use crate::impl_::stream::Stream as StreamImpl;
 use crate::impl_::node::Node;
 use crate::impl_::lambda::IsLambda1;
@@ -48,7 +49,7 @@ impl<A:Clone+Send+'static> Stream<A> {
     }
 
     pub fn snapshot3<B:Send+Clone+'static,C:Send+Clone+'static,D:Send+Clone+'static,FN:IsLambda3<A,B,C,D>+Send+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, mut f: FN) -> Stream<D> {
-        let deps: Vec<Node>;
+        let deps: Vec<GcNode>;
         if let Some(deps2) = f.deps_op() {
             deps = deps2.clone();
         } else {

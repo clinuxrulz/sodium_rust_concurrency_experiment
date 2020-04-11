@@ -44,7 +44,7 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
             let node = data.stream.node();
             node.add_dependency(s.node());
             let s = s.clone();
-            node.add_update_dependencies(vec![s.node(), node.clone()]);
+            node.add_update_dependencies(vec![s.gc_node.clone(), node.gc_node.clone()]);
             let s_out = data.stream.clone();
             node.with_data(|data: &mut NodeData| {
                 data.update = Box::new(move || {

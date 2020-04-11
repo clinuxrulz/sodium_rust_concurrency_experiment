@@ -79,6 +79,7 @@ impl<A:Send+'static> Stream<A> {
                     },
                     Vec::new()
                 );
+                node.gc_node.inc_ref();
                 node.add_update_dependencies(vec![node.clone()]);
                 node
             }

@@ -25,7 +25,8 @@ pub struct SodiumCtxData {
     pub post: Vec<Box<dyn FnMut()+Send>>,
     pub keep_alive: Vec<Listener>,
     pub collecting_cycles: bool,
-    pub allow_add_roots: bool
+    pub allow_add_roots: bool,
+    pub allow_collect_cycles_counter: u32
 }
 
 pub struct ThreadedMode {
@@ -116,7 +117,8 @@ impl SodiumCtx {
                         post: Vec::new(),
                         keep_alive: Vec::new(),
                         collecting_cycles: false,
-                        allow_add_roots: true
+                        allow_add_roots: true,
+                        allow_collect_cycles_counter: 0
                     }
                 )),
             node_count: Arc::new(Mutex::new(0)),
@@ -230,6 +232,7 @@ impl SodiumCtx {
     pub fn end_of_transaction(&self) {
         self.with_data(|data: &mut SodiumCtxData| {
             data.transaction_depth = data.transaction_depth + 1;
+            data.allow_collect_cycles_counter = data.allow_collect_cycles_counter + 1;
         });
         loop {
             let changed_nodes: Vec<Node> =
@@ -268,8 +271,15 @@ impl SodiumCtx {
         for mut k in post {
             k();
         }
-        // gc
-        self.collect_cycles()
+        let allow_collect_cycles =
+            self.with_data(|data: &mut SodiumCtxData| {
+                data.allow_collect_cycles_counter = data.allow_collect_cycles_counter - 1;
+                data.allow_collect_cycles_counter == 0
+            });
+        if allow_collect_cycles {
+            // gc
+            self.collect_cycles()
+        }
     }
 
     pub fn update_node(&self, node: &Node) {

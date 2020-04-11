@@ -191,25 +191,31 @@ impl GcCtx {
     }
 
     fn collect_roots(&self) {
-        let mut white = Vec::new();
-        let mut roots = Vec::new();
-        self.with_data(|data: &mut GcCtxData| roots.append(&mut data.roots));
-        for root in roots {
-            root.with_data(|data: &mut GcNodeData| data.buffered = false);
-            self.collect_white(&root, &mut white);
-        }
-        for i in white {
-            if i.ref_count() == 1 {
-                trace!("collect_roots: freeing white node {}", i.id);
-                i.free();
+        loop {
+            let mut white = Vec::new();
+            let mut roots = Vec::new();
+            self.with_data(|data: &mut GcCtxData| roots.append(&mut data.roots));
+            for root in roots {
+                root.with_data(|data: &mut GcNodeData| data.buffered = false);
+                self.collect_white(&root, &mut white);
             }
-        }
-        let mut to_be_freed = Vec::new();
-        self.with_data(|data: &mut GcCtxData| to_be_freed.append(&mut data.to_be_freed));
-        for i in to_be_freed {
-            if i.ref_count() == 1 {
-                trace!("collect_roots: freeing to_be_freed node {}", i.id);
-                i.free();
+            for i in white {
+                if i.ref_count() == 1 {
+                    trace!("collect_roots: freeing white node {}", i.id);
+                    i.free();
+                }
+            }
+            let mut to_be_freed = Vec::new();
+            self.with_data(|data: &mut GcCtxData| to_be_freed.append(&mut data.to_be_freed));
+            for i in to_be_freed {
+                if i.ref_count() == 1 {
+                    trace!("collect_roots: freeing to_be_freed node {}", i.id);
+                    i.free();
+                }
+            }
+            let bail = self.with_data(|data: &mut GcCtxData| data.roots.is_empty());
+            if bail {
+                break;
             }
         }
     }

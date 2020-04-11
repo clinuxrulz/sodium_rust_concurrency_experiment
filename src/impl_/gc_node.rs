@@ -176,7 +176,7 @@ impl GcCtx {
         s.with_data(|data: &mut GcNodeData| data.color = Color::Black);
         let this = self.clone();
         s.trace(|t| {
-            trace!("scan_black: gc node {} dec ref count", t.id);
+            trace!("scan_black: gc node {} inc ref count", t.id);
             let color =
                 t.with_data(|data: &mut GcNodeData| {
                     data.ref_count = data.ref_count + 1;

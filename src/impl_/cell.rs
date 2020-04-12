@@ -127,6 +127,7 @@ impl<A:Send+'static> Cell<A> {
         let node: Node;
         {
             let c = c.clone();
+            let c_gc_node = c.gc_node.clone();
             let stream2 = Stream::downgrade(&stream2);
             let sodium_ctx2 = sodium_ctx.clone();
             node = Node::new(
@@ -157,7 +158,7 @@ impl<A:Send+'static> Cell<A> {
                 },
                 vec![stream.node()]
             );
-            node.add_update_dependencies(vec![node.gc_node.clone()]);
+            node.add_update_dependencies(vec![c_gc_node]);
         }
         c.with_data(|data: &mut CellData<A>| data.node = node);
         c

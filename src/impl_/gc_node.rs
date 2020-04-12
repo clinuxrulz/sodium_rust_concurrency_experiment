@@ -192,7 +192,7 @@ impl GcCtx {
                     data.ref_count = data.ref_count + 1;
                     data.color
                 });
-            if color != Color::Black {
+            if color != Color::Black && color != Color::White {
                 this.scan_black(t);
             }
         });

@@ -204,6 +204,12 @@ impl GcCtx {
             root.with_data(|data: &mut GcNodeData| data.buffered = false);
             self.collect_white(&root, &mut white);
         }
+        for i in &white {
+            if !i.with_data(|data: &mut GcNodeData| data.freed) {
+                i.with_data(|data: &mut GcNodeData| data.ref_count = data.ref_count + 1);
+                trace!("collect_roots: gc node {} inc ref count", i.id);
+            }
+        }
         for i in white {
             if !i.with_data(|data: &mut GcNodeData| data.freed) {
                 trace!("collect_roots: freeing white node {}", i.id);

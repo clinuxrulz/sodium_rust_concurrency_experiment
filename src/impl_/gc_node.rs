@@ -21,6 +21,7 @@ pub struct GcNode {
 }
 
 struct GcNodeData {
+    freed: bool,
     ref_count: u32,
     color: Color,
     buffered: bool,
@@ -166,14 +167,9 @@ impl GcCtx {
         if ref_count > 0 {
             self.scan_black(s);
         } else {
-            // must increase the reference count again which is against the paper,
-            // but the deconstructor (drop) will decrement it cause a negative reference count
-            // if we do not increment here
-            s.with_data(|data: &mut GcNodeData| {
-                data.ref_count = data.ref_count + 1;
-                data.color = Color::White;
-            });
-            //
+            s.with_data(|data: &mut GcNodeData|
+                data.color = Color::White
+            );
             let this = self.clone();
             s.trace(|t| {
                 this.scan(t);
@@ -191,7 +187,7 @@ impl GcCtx {
                     data.ref_count = data.ref_count + 1;
                     data.color
                 });
-            if color != Color::Black && color != Color::White {
+            if color != Color::Black {
                 this.scan_black(t);
             }
         });
@@ -206,7 +202,7 @@ impl GcCtx {
             self.collect_white(&root, &mut white);
         }
         for i in white {
-            if i.ref_count() == 1 {
+            if !i.with_data(|data: &mut GcNodeData| data.freed) {
                 trace!("collect_roots: freeing white node {}", i.id);
                 i.free();
             }
@@ -214,7 +210,7 @@ impl GcCtx {
         let mut to_be_freed = Vec::new();
         self.with_data(|data: &mut GcCtxData| to_be_freed.append(&mut data.to_be_freed));
         for i in to_be_freed {
-            if i.ref_count() == 1 {
+            if !i.with_data(|data: &mut GcNodeData| data.freed) {
                 trace!("collect_roots: freeing to_be_freed node {}", i.id);
                 i.free();
             }
@@ -246,6 +242,7 @@ impl GcNode {
             id: gc_ctx.make_id(),
             gc_ctx: gc_ctx.clone(),
             data: Arc::new(Mutex::new(GcNodeData {
+                freed: false,
                 ref_count: 1,
                 color: Color::Black,
                 buffered: false,
@@ -303,7 +300,9 @@ impl GcNode {
             self.with_data(|data: &mut GcNodeData| {
                 data.color = Color::Black;
             });
-            self.free();
+            if !buffered {
+                self.free();
+            }
         } else {
             self.with_data(|data: &mut GcNodeData| {
                 data.buffered = true;
@@ -318,6 +317,7 @@ impl GcNode {
         self.with_data(|data: &mut GcNodeData| {
             std::mem::swap(&mut deconstructor, &mut data.deconstructor);
             data.trace = Box::new(|_tracer: &mut Tracer| {});
+            data.freed = true;
         });
         deconstructor();
     }

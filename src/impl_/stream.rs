@@ -406,7 +406,7 @@ impl<A:Send+'static> Stream<A> {
                     },
                     vec![self.node()]
                 );
-                node.add_update_dependencies(vec![node.gc_node.clone()]);
+                node.add_update_dependencies(vec![s.gc_node.clone()]);
                 node
             }
         )

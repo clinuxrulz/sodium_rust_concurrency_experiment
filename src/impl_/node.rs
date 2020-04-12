@@ -76,6 +76,9 @@ impl Node {
                     std::mem::swap(&mut data.dependencies, &mut dependencies);
                     data.update_dependencies.clear();
                     data.update = Box::new(|| {});
+                    for gc_node in &data.keep_alive {
+                        gc_node.dec_ref();
+                    }
                     data.keep_alive.clear();
                 });
                 for dependency in dependencies {
@@ -202,6 +205,7 @@ impl Node {
 
     pub fn add_keep_alive(&self, gc_node: &GcNode) {
         self.with_data(|data: &mut NodeData| {
+            gc_node.inc_ref();
             data.keep_alive.push(gc_node.clone());
         });
     }

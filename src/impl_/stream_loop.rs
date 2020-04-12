@@ -1,3 +1,4 @@
+use crate::impl_::gc_node::{GcNode, Tracer};
 use crate::impl_::node::NodeData;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::stream::Stream;
@@ -6,7 +7,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 pub struct StreamLoop<A> {
-    pub data: Arc<Mutex<StreamLoopData<A>>>
+    pub data: Arc<Mutex<StreamLoopData<A>>>,
+    pub gc_node: GcNode
 }
 
 pub struct StreamLoopData<A> {
@@ -16,18 +18,39 @@ pub struct StreamLoopData<A> {
 
 impl<A> Clone for StreamLoop<A> {
     fn clone(&self) -> Self {
-        StreamLoop { data: self.data.clone() }
+        self.gc_node.inc_ref();
+        StreamLoop {
+            data: self.data.clone(),
+            gc_node: self.gc_node.clone()
+        }
+    }
+}
+
+impl<A> Drop for StreamLoop<A> {
+    fn drop(&mut self) {
+        self.gc_node.dec_ref();
     }
 }
 
 impl<A:Clone+Send+'static> StreamLoop<A> {
 
     pub fn new(sodium_ctx: &SodiumCtx) -> StreamLoop<A> {
+        let stream_loop_data = Arc::new(Mutex::new(StreamLoopData {
+            stream: Stream::new(sodium_ctx),
+            looped: false
+        }));
+        let gc_node_trace;
+        {
+            let stream_loop_data = stream_loop_data.clone();
+            gc_node_trace = move |tracer: &mut Tracer| {
+                let l = stream_loop_data.lock();
+                let stream_loop_data = l.as_ref().unwrap();
+                tracer(&stream_loop_data.stream.gc_node);
+            };
+        }
         StreamLoop {
-            data: Arc::new(Mutex::new(StreamLoopData {
-                stream: Stream::new(sodium_ctx),
-                looped: false
-            }))
+            data: stream_loop_data,
+            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), || {}, gc_node_trace)
         }
     }
 
@@ -44,8 +67,8 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
             let node = data.stream.node();
             node.add_dependency(s.node());
             let s = s.clone();
-            node.add_update_dependencies(vec![s.gc_node.clone(), node.gc_node.clone()]);
             let s_out = data.stream.clone();
+            node.add_update_dependencies(vec![s.gc_node.clone(), s_out.gc_node.clone()]);
             node.with_data(|data: &mut NodeData| {
                 data.update = Box::new(move || {
                     s.with_firing_op(|firing_op: &mut Option<A>| {

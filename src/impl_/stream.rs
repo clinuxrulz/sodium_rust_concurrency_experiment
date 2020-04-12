@@ -256,7 +256,7 @@ impl<A:Send+'static> Stream<A> {
                     vec![self.node()]
                 );
                 node.add_update_dependencies(pred_deps);
-                node.add_update_dependencies(vec![node.gc_node.clone()]);
+                node.add_update_dependencies(vec![s.gc_node.clone()]);
                 node
             }
         )
@@ -305,7 +305,7 @@ impl<A:Send+'static> Stream<A> {
                     vec![self.node(), s2.node()]
                 );
                 node.add_update_dependencies(f_deps);
-                node.add_update_dependencies(vec![node.gc_node.clone()]);
+                node.add_update_dependencies(vec![s.gc_node.clone()]);
                 node
             }
         )
@@ -370,7 +370,7 @@ impl<A:Send+'static> Stream<A> {
                 let a = a.clone();
                 sodium_ctx.post(move || ss.send(a.clone()))
             });
-            s.node().add_keep_alive(&listener.node_op().unwrap());
+            s.node().add_keep_alive(&listener.gc_node);
             return s;
         })
     }

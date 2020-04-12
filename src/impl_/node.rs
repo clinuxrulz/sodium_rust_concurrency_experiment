@@ -20,7 +20,7 @@ pub struct NodeData {
     pub update_dependencies: Vec<GcNode>,
     pub dependencies: Vec<Node>,
     pub dependents: Vec<WeakNode>,
-    pub keep_alive: Vec<Node>,
+    pub keep_alive: Vec<GcNode>,
     pub sodium_ctx: SodiumCtx
 }
 
@@ -76,6 +76,7 @@ impl Node {
                     std::mem::swap(&mut data.dependencies, &mut dependencies);
                     data.update_dependencies.clear();
                     data.update = Box::new(|| {});
+                    data.keep_alive.clear();
                 });
                 for dependency in dependencies {
                     let mut l = dependency.data.lock();
@@ -114,6 +115,18 @@ impl Node {
                         }
                         node.with_data(|data: &mut NodeData|
                             std::mem::swap(&mut data.update_dependencies, &mut update_dependencies)
+                        );
+                    }
+                    {
+                        let mut keep_alive = Vec::new();
+                        node.with_data(|data: &mut NodeData|
+                            std::mem::swap(&mut data.keep_alive, &mut keep_alive)
+                        );
+                        for gc_node in &keep_alive {
+                            tracer(gc_node);
+                        }
+                        node.with_data(|data: &mut NodeData|
+                            std::mem::swap(&mut data.keep_alive, &mut keep_alive)
                         );
                     }
                 }
@@ -187,9 +200,9 @@ impl Node {
         });
     }
 
-    pub fn add_keep_alive(&self, node: &Node) {
+    pub fn add_keep_alive(&self, gc_node: &GcNode) {
         self.with_data(|data: &mut NodeData| {
-            data.keep_alive.push(node.clone());
+            data.keep_alive.push(gc_node.clone());
         });
     }
 

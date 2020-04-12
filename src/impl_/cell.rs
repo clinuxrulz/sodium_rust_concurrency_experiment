@@ -400,7 +400,7 @@ impl<A:Send+'static> Cell<A> {
                     );
                 }
                 node2.add_update_dependencies(vec![node1.gc_node.clone()]);
-                node1.add_keep_alive(&node2);
+                node1.add_keep_alive(&node2.gc_node);
                 return node1;
             }
         )

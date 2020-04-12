@@ -299,9 +299,7 @@ impl GcNode {
             self.with_data(|data: &mut GcNodeData| {
                 data.color = Color::Black;
             });
-            if !buffered {
-                self.free();
-            }
+            self.free();
         } else {
             self.with_data(|data: &mut GcNodeData| {
                 data.buffered = true;

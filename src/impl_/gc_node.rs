@@ -218,7 +218,7 @@ impl GcCtx {
     }
 
     fn collect_white(&self, s: &GcNode, white: &mut Vec<GcNode>) {
-        if s.with_data(|data: &mut GcNodeData| data.color == Color::White && !data.buffered) {
+        if s.with_data(|data: &mut GcNodeData| data.color == Color::White) {
             s.with_data(|data: &mut GcNodeData| data.color = Color::Black);
             let this = self.clone();
             s.trace(|t| {

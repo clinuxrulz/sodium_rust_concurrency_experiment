@@ -22,7 +22,7 @@ fn mem() {
     let sodium_ctx = &sodium_ctx;
     {
         let s = sodium_ctx.new_stream::<i32>();
-        //let s2 = s.map_to(5);
+        let s2 = s.map_to(5);
         //let s3 = s2.map_to(3);
         //let l = s2.listen_weak(|_:&i32| {});
         //l.unlisten();

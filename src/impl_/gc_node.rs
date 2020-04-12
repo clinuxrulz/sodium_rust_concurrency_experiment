@@ -291,7 +291,7 @@ impl GcNode {
     }
 
     pub fn dec_ref(&self) {
-        if self.with_data(|data: &mut GcNodeData| data.ref_count == 0) {
+        if self.with_data(|data: &mut GcNodeData| data.freed) {
             return;
         }
         let (ref_count, buffered) =

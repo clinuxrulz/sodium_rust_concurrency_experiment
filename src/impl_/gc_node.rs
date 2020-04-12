@@ -101,7 +101,7 @@ impl GcCtx {
                     root.with_data(
                         |data: &mut GcNodeData| {
                             data.buffered = false;
-                            data.color == Color::Black && data.ref_count == 0
+                            data.color == Color::Black && data.ref_count == 0 && !data.freed
                         }
                     );
                 if free_it {
@@ -133,6 +133,9 @@ impl GcCtx {
 
         let this = self.clone();
         node.trace(&mut |t: &GcNode| {
+            if t.with_data(|data: &mut GcNodeData| data.ref_count == 0) {
+                return;
+            }
             trace!("mark_gray: gc node {} dec ref count", t.id);
             t.with_data(|data: &mut GcNodeData| data.ref_count = data.ref_count - 1);
             this.mark_gray(t);
@@ -301,6 +304,7 @@ impl GcNode {
                 data.color = Color::Black;
             });
             if !buffered {
+                trace!("dec_ref: freeing node {}", self.id);
                 self.free();
             }
         } else {

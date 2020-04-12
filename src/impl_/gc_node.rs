@@ -176,6 +176,8 @@ impl GcCtx {
             let this = self.clone();
             s.trace(|t| {
                 this.scan(t);
+                trace!("scan: gc node {} inc ref count", t.id);
+                t.with_data(|data: &mut GcNodeData| data.ref_count = data.ref_count + 1);
             });
         }
     }
@@ -203,12 +205,6 @@ impl GcCtx {
         for root in roots {
             root.with_data(|data: &mut GcNodeData| data.buffered = false);
             self.collect_white(&root, &mut white);
-        }
-        for i in &white {
-            if !i.with_data(|data: &mut GcNodeData| data.freed) {
-                i.with_data(|data: &mut GcNodeData| data.ref_count = data.ref_count + 1);
-                trace!("collect_roots: gc node {} inc ref count", i.id);
-            }
         }
         for i in white {
             if !i.with_data(|data: &mut GcNodeData| data.freed) {

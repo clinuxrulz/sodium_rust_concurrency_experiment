@@ -169,9 +169,12 @@ impl GcCtx {
             // must increase the reference count again which is against the paper,
             // but the deconstructor (drop) will decrement it cause a negative reference count
             // if we do not increment here
-            self.scan_black(s);
+            //self.scan_black(s);
             // now set it to white
-            s.with_data(|data: &mut GcNodeData| data.color = Color::White);
+            s.with_data(|data: &mut GcNodeData| {
+                data.ref_count = data.ref_count + 1;
+                data.color = Color::White;
+            });
             //
             let this = self.clone();
             s.trace(|t| {
@@ -288,6 +291,9 @@ impl GcNode {
     }
 
     pub fn dec_ref(&self) {
+        if self.with_data(|data: &mut GcNodeData| data.ref_count == 0) {
+            return;
+        }
         let (ref_count, buffered) =
             self.with_data(
                 |data: &mut GcNodeData| {

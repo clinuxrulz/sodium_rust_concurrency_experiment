@@ -1,3 +1,4 @@
+use crate::impl_::gc_node::{GcNode, Tracer};
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::node::{Node, NodeData};
@@ -20,17 +21,27 @@ use std::sync::Weak;
 
 pub struct Cell<A> {
     data: Arc<Mutex<CellData<A>>>,
+    gc_node: GcNode
 }
 
 pub struct WeakCell<A> {
-    data: Weak<Mutex<CellData<A>>>
+    data: Weak<Mutex<CellData<A>>>,
+    gc_node: GcNode
 }
 
 impl<A> Clone for Cell<A> {
     fn clone(&self) -> Self {
+        self.gc_node.inc_ref();
         Cell {
-            data: self.data.clone()
+            data: self.data.clone(),
+            gc_node: self.gc_node.clone()
         }
+    }
+}
+
+impl<A> Drop for Cell<A> {
+    fn drop(&mut self) {
+        self.gc_node.dec_ref();
     }
 }
 
@@ -59,13 +70,25 @@ impl<A> Cell<A> {
 
 impl<A:Send+'static> Cell<A> {
     pub fn new(sodium_ctx: &SodiumCtx, value: A) -> Cell<A> where A: Clone {
+        let cell_data = Arc::new(Mutex::new(CellData {
+            node: sodium_ctx.null_node(),
+            stream: Stream::new(sodium_ctx),
+            value: Lazy::of_value(value),
+            next_value_op: None,
+        }));
+        let gc_node_trace;
+        {
+            let cell_data = cell_data.clone();
+            gc_node_trace = move |tracer: &mut Tracer| {
+                let l = cell_data.lock();
+                let cell_data = l.as_ref().unwrap();
+                tracer(&cell_data.node.gc_node);
+                tracer(&cell_data.stream.gc_node);
+            };
+        }
         Cell {
-            data: Arc::new(Mutex::new(CellData {
-                node: sodium_ctx.null_node(),
-                stream: Stream::new(sodium_ctx),
-                value: Lazy::of_value(value),
-                next_value_op: None,
-            }))
+            data: cell_data,
+            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), || {}, gc_node_trace)
         }
     }
 
@@ -80,13 +103,25 @@ impl<A:Send+'static> Cell<A> {
                     value
                 }
             });
-        let mut c = Cell {
-            data: Arc::new(Mutex::new(CellData {
-                node: sodium_ctx.null_node(),
-                stream: stream.clone(),
-                value: init_value,
-                next_value_op: None,
-            }))
+        let cell_data = Arc::new(Mutex::new(CellData {
+            node: sodium_ctx.null_node(),
+            stream: stream.clone(),
+            value: init_value,
+            next_value_op: None,
+        }));
+        let gc_node_trace;
+        {
+            let cell_data = cell_data.clone();
+            gc_node_trace = move |tracer: &mut Tracer| {
+                let l = cell_data.lock();
+                let cell_data = l.as_ref().unwrap();
+                tracer(&cell_data.node.gc_node);
+                tracer(&cell_data.stream.gc_node);
+            };
+        }
+        let c = Cell {
+            data: cell_data,
+            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), || {}, gc_node_trace)
         };
         let sodium_ctx = sodium_ctx.clone();
         let node: Node;
@@ -461,7 +496,8 @@ impl<A:Send+'static> Cell<A> {
 
     pub fn downgrade(this: &Self) -> WeakCell<A> {
         WeakCell {
-            data: Arc::downgrade(&this.data)
+            data: Arc::downgrade(&this.data),
+            gc_node: this.gc_node.clone()
         }
     }
 }
@@ -469,7 +505,8 @@ impl<A:Send+'static> Cell<A> {
 impl<A> WeakCell<A> {
     pub fn upgrade(&self) -> Option<Cell<A>> {
         if let Some(data) = self.data.upgrade() {
-            return Some(Cell { data });
+            self.gc_node.inc_ref();
+            return Some(Cell { data, gc_node: self.gc_node.clone() });
         }
         None
     }

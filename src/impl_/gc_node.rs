@@ -176,8 +176,6 @@ impl GcCtx {
             let this = self.clone();
             s.trace(|t| {
                 this.scan(t);
-                trace!("scan: gc node {} inc ref count", t.id);
-                t.with_data(|data: &mut GcNodeData| data.ref_count = data.ref_count + 1);
             });
         }
     }
@@ -192,7 +190,7 @@ impl GcCtx {
                     data.ref_count = data.ref_count + 1;
                     data.color
                 });
-            if color != Color::Black && color != Color::White {
+            if color != Color::Black {
                 this.scan_black(t);
             }
         });
@@ -284,6 +282,9 @@ impl GcNode {
     pub fn inc_ref(&self) {
         self.with_data(
             |data: &mut GcNodeData| {
+                if data.freed {
+                    panic!("inc_ref on freed node")
+                }
                 data.ref_count = data.ref_count + 1;
                 data.color = Color::Black;
             }
@@ -291,7 +292,7 @@ impl GcNode {
     }
 
     pub fn dec_ref(&self) {
-        if self.with_data(|data: &mut GcNodeData| data.freed) {
+        if self.with_data(|data: &mut GcNodeData| data.freed || data.ref_count == 0) {
             return;
         }
         let (ref_count, buffered) =

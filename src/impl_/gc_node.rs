@@ -23,6 +23,8 @@ pub struct GcNode {
 struct GcNodeData {
     freed: bool,
     ref_count: u32,
+    ref_count_adj: u32,
+    visited: bool,
     color: Color,
     buffered: bool,
     deconstructor: Box<dyn Fn()+Send+Sync>,
@@ -51,7 +53,7 @@ impl GcCtx {
         }
     }
 
-    fn with_data<R,K:FnOnce(&mut GcCtxData)->R>(&self, mut k:K) -> R {
+    fn with_data<R,K:FnOnce(&mut GcCtxData)->R>(&self, k: K) -> R {
         let mut l = self.data.lock();
         let data = l.as_mut().unwrap();
         k(data)
@@ -65,7 +67,7 @@ impl GcCtx {
         })
     }
 
-    pub fn possible_root(&self, node: GcNode) {
+    pub fn add_possible_root(&self, node: GcNode) {
         self.with_data(|data: &mut GcCtxData| data.roots.push(node));
     }
 
@@ -92,7 +94,7 @@ impl GcCtx {
         );
         let mut new_roots: Vec<GcNode> = Vec::new();
         for root in old_roots {
-            let (color,ref_count) = root.with_data(|data: &mut GcNodeData| (data.color, data.ref_count));
+            let (color,_ref_count) = root.with_data(|data: &mut GcNodeData| (data.color, data.ref_count));
             if color == Color::Purple {
                 self.mark_gray(&root);
                 new_roots.push(root);
@@ -119,6 +121,27 @@ impl GcCtx {
         trace!("end: mark_roots");
     }
 
+    fn check_ref_counts_restored(&self, s: &GcNode) {
+        let was_visited = 
+            s.with_data(|data: &mut GcNodeData| {
+                if data.visited {
+                    return true;
+                }
+                data.visited = true;
+                return false;
+            });
+        if was_visited {
+            return;
+        }
+        let ref_count_restored =
+            s.with_data(|data: &mut GcNodeData| data.ref_count_adj == 0);
+        if !ref_count_restored {
+            panic!("ref counts were not restored");
+        }
+        s.trace(|t| self.check_ref_counts_restored(t));
+        s.with_data(|data: &mut GcNodeData| data.visited = false);
+    }
+
     fn mark_gray(&self, node: &GcNode) {
         let bail = node.with_data(|data: &mut GcNodeData| {
             if data.color == Color::Gray {
@@ -133,11 +156,8 @@ impl GcCtx {
 
         let this = self.clone();
         node.trace(&mut |t: &GcNode| {
-            if t.with_data(|data: &mut GcNodeData| data.ref_count == 0) {
-                return;
-            }
             trace!("mark_gray: gc node {} dec ref count", t.id);
-            t.with_data(|data: &mut GcNodeData| data.ref_count = data.ref_count - 1);
+            t.with_data(|data: &mut GcNodeData| data.ref_count_adj = data.ref_count_adj + 1);
             this.mark_gray(t);
         });
     }
@@ -152,6 +172,9 @@ impl GcCtx {
         for root in &roots {
             self.scan(root);
         }
+        for root in &roots {
+            self.check_ref_counts_restored(&root);
+        }
         self.with_data(
             |data: &mut GcCtxData|
                 std::mem::swap(&mut roots, &mut data.roots)
@@ -165,7 +188,7 @@ impl GcCtx {
             return;
         }
 
-        let ref_count = s.with_data(|data: &mut GcNodeData| data.ref_count);
+        let ref_count = s.with_data(|data: &mut GcNodeData| data.ref_count - data.ref_count_adj);
 
         if ref_count > 0 {
             self.scan_black(s);
@@ -173,9 +196,9 @@ impl GcCtx {
             s.with_data(|data: &mut GcNodeData|
                 data.color = Color::White
             );
-            let this = self.clone();
             s.trace(|t| {
-                this.scan(t);
+                self.scan(t);
+                t.with_data(|data: &mut GcNodeData| data.ref_count_adj = data.ref_count_adj - 1);
             });
         }
     }
@@ -187,7 +210,7 @@ impl GcCtx {
             trace!("scan_black: gc node {} inc ref count", t.id);
             let color =
                 t.with_data(|data: &mut GcNodeData| {
-                    data.ref_count = data.ref_count + 1;
+                    data.ref_count_adj = data.ref_count_adj - 1;
                     data.color
                 });
             if color != Color::Black {
@@ -247,6 +270,8 @@ impl GcNode {
             data: Arc::new(Mutex::new(GcNodeData {
                 freed: false,
                 ref_count: 1,
+                ref_count_adj: 0,
+                visited: false,
                 color: Color::Black,
                 buffered: false,
                 deconstructor: Box::new(deconstructor),
@@ -292,30 +317,45 @@ impl GcNode {
     }
 
     pub fn dec_ref(&self) {
-        if self.with_data(|data: &mut GcNodeData| data.freed || data.ref_count == 0) {
-            return;
-        }
-        let (ref_count, buffered) =
+        let ref_count =
             self.with_data(
                 |data: &mut GcNodeData| {
                     data.ref_count = data.ref_count - 1;
-                    (data.ref_count, data.buffered)
+                    data.ref_count
                 }
             );
         if ref_count == 0 {
+            self.release();
+        } else {
+            self.possible_root();
+        }
+    }
+
+    pub fn release(&self) {
+        let buffered =
             self.with_data(|data: &mut GcNodeData| {
                 data.color = Color::Black;
+                data.buffered
             });
-            if !buffered {
-                trace!("dec_ref: freeing node {}", self.id);
-                self.free();
-            }
-        } else {
+        if !buffered {
+            self.free();
+        }
+    }
+
+    pub fn possible_root(&self) {
+        let add_it =
             self.with_data(|data: &mut GcNodeData| {
-                data.buffered = true;
-                data.color = Color::Purple
+                if data.color != Color::Purple {
+                    data.color = Color::Purple;
+                    if !data.buffered {
+                        data.buffered = true;
+                        return true;
+                    }
+                }
+                return false;
             });
-            self.gc_ctx.possible_root(self.clone());
+        if add_it {
+            self.gc_ctx.add_possible_root(self.clone());
         }
     }
 

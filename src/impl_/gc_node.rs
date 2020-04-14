@@ -198,6 +198,7 @@ impl GcCtx {
             );
             s.trace(|t| {
                 self.scan(t);
+                trace!("scan: gc node {} inc ref count", t.id);
                 t.with_data(|data: &mut GcNodeData| data.ref_count_adj = data.ref_count_adj - 1);
             });
         }

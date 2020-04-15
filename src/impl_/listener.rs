@@ -42,25 +42,22 @@ impl Listener {
             is_weak
         }));
         let gc_node_desconstructor;
+        {
+            let listener_data = listener_data.clone();
+            gc_node_desconstructor = move || {
+                let mut l = listener_data.lock();
+                let listener_data = l.as_mut().unwrap();
+                listener_data.node_op = None;
+            };
+        }
         let gc_node_trace;
         {
             let listener_data = listener_data.clone();
-            {
-                let listener_data = listener_data.clone();
-                gc_node_desconstructor = move || {
-                    let mut l = listener_data.lock();
-                    let listener_data = l.as_mut().unwrap();
-                    listener_data.node_op = None;
-                };
-            }
-            {
-                let listener_data = listener_data.clone();
-                gc_node_trace = move |tracer: &mut Tracer| {
-                    let mut l = listener_data.lock();
-                    let listener_data = l.as_mut().unwrap();
-                    listener_data.node_op.iter().for_each(|node: &Node| tracer(&node.gc_node));
-                };
-            }
+            gc_node_trace = move |tracer: &mut Tracer| {
+                let mut l = listener_data.lock();
+                let listener_data = l.as_mut().unwrap();
+                listener_data.node_op.iter().for_each(|node: &Node| tracer(&node.gc_node));
+            };
         }
         let listener = Listener {
             data: listener_data,

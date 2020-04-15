@@ -236,19 +236,19 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn filter<PRED:IsLambda1<A,bool>+Send+'static>(&self, mut pred: PRED) -> Stream<A> where A: Clone {
-        let self_ = Stream::downgrade(self);
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
             "Stream::filter",
             |s: &Stream<A>| {
+                let self_ = self.clone();
+                let self_gc_node = self.gc_node.clone();
                 let _s = s.clone();
                 let pred_deps = lambda1_deps(&pred);
                 let node = Node::new(
                     &sodium_ctx,
                     "Stream::filter node",
                     move || {
-                        let self_ = self_.upgrade().unwrap();
                         self_.with_firing_op(|firing_op: &mut Option<A>| {
                             let firing_op2 = firing_op.clone().filter(|firing| pred.call(firing));
                             if let Some(firing) = firing_op2 {
@@ -259,7 +259,7 @@ impl<A:Send+'static> Stream<A> {
                     vec![self.node()]
                 );
                 node.add_update_dependencies(pred_deps);
-                node.add_update_dependencies(vec![s.gc_node.clone()]);
+                node.add_update_dependencies(vec![self_gc_node, s.gc_node.clone()]);
                 node
             }
         )
@@ -277,31 +277,27 @@ impl<A:Send+'static> Stream<A> {
             &sodium_ctx,
             "Stream::merge",
             |s: &Stream<A>| {
-                let _s = s.clone();
-                let _s2 = s2.clone();
-                let _self = Stream::downgrade(&_self);
-                let _s2 = Stream::downgrade(&_s2);
+                let s_ = s.clone();
+                let s2_ = s2.clone();
+                let self_ = self.clone();
+                let self_gc_node = self.gc_node.clone();
+                let s2_gc_node = s2.gc_node.clone();
                 let f_deps = lambda2_deps(&f);
                 let node = Node::new(
                     &sodium_ctx,
                     "Stream::merge node",
                     move || {
-                        let _self_op = _self.upgrade();
-                        let _s2_op = _s2.upgrade();
-                        assert!(_self_op.is_some() && _s2_op.is_some());
-                        let _self = _self_op.unwrap();
-                        let _s2 = _s2_op.unwrap();
-                        _self.with_firing_op(|firing1_op: &mut Option<A>| {
-                            _s2.with_firing_op(|firing2_op: &mut Option<A>| {
+                        self_.with_firing_op(|firing1_op: &mut Option<A>| {
+                            s2_.with_firing_op(|firing2_op: &mut Option<A>| {
                                 if let Some(ref firing1) = firing1_op {
                                     if let Some(ref firing2) = firing2_op {
-                                        _s._send(f.call(firing1, firing2));
+                                        s_._send(f.call(firing1, firing2));
                                     } else {
-                                        _s._send(firing1.clone());
+                                        s_._send(firing1.clone());
                                     }
                                 } else {
                                     if let Some(ref firing2) = firing2_op {
-                                        _s._send(firing2.clone());
+                                        s_._send(firing2.clone());
                                     }
                                 }
                             })
@@ -310,7 +306,7 @@ impl<A:Send+'static> Stream<A> {
                     vec![self.node(), s2.node()]
                 );
                 node.add_update_dependencies(f_deps);
-                node.add_update_dependencies(vec![s.gc_node.clone()]);
+                node.add_update_dependencies(vec![self_gc_node, s2_gc_node, s.gc_node.clone()]);
                 node
             }
         )
@@ -420,13 +416,13 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn _listen<K:IsLambda1<A,()>+Send+'static>(&self, mut k: K, weak: bool) -> Listener {
-        let self_ = Stream::downgrade(self);
+        let self_ = self.clone();
+        let self_gc_node = self.gc_node.clone();
         let node =
             Node::new(
                 &self.sodium_ctx(),
                 "Stream::listen node",
                 move || {
-                    let self_ = self_.upgrade().unwrap();
                     self_.with_data(|data: &mut StreamData<A>| {
                         for firing in &data.firing_op {
                             k.call(firing)
@@ -435,6 +431,7 @@ impl<A:Send+'static> Stream<A> {
                 },
                 vec![self.node()]
             );
+        node.add_update_dependencies(vec![self_gc_node]);
         Listener::new(&self.sodium_ctx(), weak, node)
     }
 

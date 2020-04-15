@@ -231,7 +231,9 @@ impl GcCtx {
         }
         for i in white {
             if !i.with_data(|data: &mut GcNodeData| data.freed) {
-                trace!("collect_roots: freeing white node {}", i.id);
+                i.with_data(|data: &mut GcNodeData| {
+                    trace!("collect_roots: freeing white node {} ({})", i.id, data.name);
+                });
                 i.free();
                 self.with_data(|data: &mut GcCtxData| data.roots.retain(|root: &GcNode| root.id != i.id));
             }
@@ -240,7 +242,9 @@ impl GcCtx {
         self.with_data(|data: &mut GcCtxData| to_be_freed.append(&mut data.to_be_freed));
         for i in to_be_freed {
             if !i.with_data(|data: &mut GcNodeData| data.freed) {
-                trace!("collect_roots: freeing to_be_freed node {}", i.id);
+                i.with_data(|data: &mut GcNodeData| {
+                    trace!("collect_roots: freeing to_be_freed node {} ({})", i.id, data.name);
+                });
                 i.free();
                 self.with_data(|data: &mut GcCtxData| data.roots.retain(|root: &GcNode| root.id != i.id));
             }
@@ -346,6 +350,9 @@ impl GcNode {
                 data.buffered
             });
         if !buffered {
+            self.with_data(|data: &mut GcNodeData| {
+                trace!("release: freeing gc_node {} ({})", self.id, data.name);
+            });
             self.free();
         }
     }

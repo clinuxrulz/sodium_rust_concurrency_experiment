@@ -215,7 +215,7 @@ impl GcCtx {
                     data.ref_count_adj = data.ref_count_adj - 1;
                     data.color
                 });
-            if color != Color::Black && color != Color::White {
+            if color != Color::Black {
                 this.scan_black(t);
             }
         });

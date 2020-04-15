@@ -73,15 +73,13 @@ impl Node {
                 }
                 let mut dependencies = Vec::new();
                 let mut dependents = Vec::new();
+                let mut keep_alive = Vec::new();
                 node.with_data(|data: &mut NodeData| {
                     std::mem::swap(&mut data.dependencies, &mut dependencies);
                     std::mem::swap(&mut data.dependents, &mut dependents);
+                    std::mem::swap(&mut data.keep_alive, &mut keep_alive);
                     data.update_dependencies.clear();
                     data.update = Box::new(|| {});
-                    for gc_node in &data.keep_alive {
-                        gc_node.dec_ref();
-                    }
-                    data.keep_alive.clear();
                 });
                 for dependency in dependencies {
                     let mut l = dependency.data.lock();
@@ -92,6 +90,9 @@ impl Node {
                     let mut l = dependent.data.lock();
                     let dependent = l.as_mut().unwrap();
                     dependent.dependencies.retain(|dependency| !Arc::ptr_eq(&dependency.data, &node.data));
+                }
+                for gc_node in keep_alive {
+                    gc_node.dec_ref();
                 }
             };
         }

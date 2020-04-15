@@ -25,7 +25,7 @@ fn mem() {
         let s2 = s.map_to(5);
         let s3 = s2.map_to(3);
         let l = s2.listen_weak(|_:&i32| {});
-        //l.unlisten();
+        l.unlisten();
     }
     sodium_ctx.impl_.collect_cycles();
     let node_count = sodium_ctx.impl_.node_count();
@@ -67,8 +67,8 @@ fn map_c_mem() {
         let cs1: CellSink<i32> = sodium_ctx.new_cell_sink(3);
         let c1 = cs1.cell();
         let _c2 = c1.map(|a:&i32| a + 5);
-        //let l = _c2.listen_weak(|_:&i32| {});
-        //l.unlisten();
+        let l = _c2.listen_weak(|_:&i32| {});
+        l.unlisten();
     }
     sodium_ctx.impl_.collect_cycles();
     let node_count = sodium_ctx.impl_.node_count();

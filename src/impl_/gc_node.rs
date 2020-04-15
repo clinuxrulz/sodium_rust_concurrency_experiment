@@ -385,18 +385,14 @@ impl GcNode {
     }
 
     pub fn trace<TRACER: FnMut(&GcNode)>(&self, mut tracer: TRACER) {
-        let mut trace: Box<Trace> = Box::new(|_tracer: &mut Tracer| {});
+        let mut children = Vec::new();
         self.with_data(|data: &mut GcNodeData| {
-            std::mem::swap(&mut trace, &mut data.trace);
+            (data.trace)(&mut |gc_node: &GcNode| {
+                children.push(gc_node.clone());
+            });
         });
-        let mut tracer2 = |gc_node: &GcNode| {
-            if gc_node.with_data(|data: &mut GcNodeData| !data.freed) {
-                tracer(gc_node);
-            }
-        };
-        trace(&mut tracer2);
-        self.with_data(|data: &mut GcNodeData| {
-            std::mem::swap(&mut trace, &mut data.trace);
-        });
+        for child in children {
+            tracer(&child);
+        }
     }
 }

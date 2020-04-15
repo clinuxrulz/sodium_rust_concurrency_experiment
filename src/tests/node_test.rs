@@ -11,18 +11,21 @@ fn node_mem_1() {
         let node1 =
             Node::new(
                 &sodium_ctx,
+                "node1",
                 || {},
                 vec![]
             );
         let node2 =
             Node::new(
                 &sodium_ctx,
+                "node2",
                 || {},
                 vec![node1.clone()]
             );
         let node3 =
             Node::new(
                 &sodium_ctx,
+                "node3",
                 || {},
                 vec![node2.clone()]
             );
@@ -50,24 +53,28 @@ fn node_mem_2() {
         let node0 =
             Node::new(
                 &sodium_ctx,
+                "node0",
                 || {},
                 vec![]
             );
         let node1 =
             Node::new(
                 &sodium_ctx,
+                "node1",
                 || {},
                 vec![node0.clone()]
             );
         let node2 =
             Node::new(
                 &sodium_ctx,
+                "node2",
                 || {},
                 vec![node1.clone()]
             );
         let node3 =
             Node::new(
                 &sodium_ctx,
+                "node3",
                 || {},
                 vec![node2.clone()]
             );
@@ -75,18 +82,21 @@ fn node_mem_2() {
         let node4 =
             Node::new(
                 &sodium_ctx,
+                "node4",
                 || {},
                 vec![node2.clone()]
             );
         let node5 =
             Node::new(
                 &sodium_ctx,
+                "node5",
                 || {},
                 vec![node4.clone()]
             );
         let node6 =
             Node::new(
                 &sodium_ctx,
+                "node6",
                 || {},
                 vec![node5.clone()]
             );

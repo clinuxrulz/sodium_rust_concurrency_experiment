@@ -50,7 +50,7 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
         }
         StreamLoop {
             data: stream_loop_data,
-            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), || {}, gc_node_trace)
+            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "StreamLoop::new", || {}, gc_node_trace)
         }
     }
 

@@ -57,7 +57,7 @@ impl Drop for NodeData {
 }
 
 impl Node {
-    pub fn new<UPDATE:FnMut()+Send+'static>(sodium_ctx: &SodiumCtx, update: UPDATE, dependencies: Vec<Node>) -> Self {
+    pub fn new<NAME:ToString,UPDATE:FnMut()+Send+'static>(sodium_ctx: &SodiumCtx, name:NAME, update: UPDATE, dependencies: Vec<Node>) -> Self {
         let result_forward_ref: Arc<Mutex<Option<WeakNode>>> = Arc::new(Mutex::new(None));
         let deconstructor;
         let trace;
@@ -72,8 +72,10 @@ impl Node {
                     node = node2.clone().unwrap();
                 }
                 let mut dependencies = Vec::new();
+                let mut dependents = Vec::new();
                 node.with_data(|data: &mut NodeData| {
                     std::mem::swap(&mut data.dependencies, &mut dependencies);
+                    std::mem::swap(&mut data.dependents, &mut dependents);
                     data.update_dependencies.clear();
                     data.update = Box::new(|| {});
                     for gc_node in &data.keep_alive {
@@ -85,6 +87,11 @@ impl Node {
                     let mut l = dependency.data.lock();
                     let dependency = l.as_mut().unwrap();
                     dependency.dependents.retain(|dependent| !Arc::ptr_eq(&dependent.data, &node.data));
+                }
+                for dependent in dependents {
+                    let mut l = dependent.data.lock();
+                    let dependent = l.as_mut().unwrap();
+                    dependent.dependencies.retain(|dependency| !Arc::ptr_eq(&dependency.data, &node.data));
                 }
             };
         }
@@ -152,6 +159,7 @@ impl Node {
                     )),
                 gc_node: GcNode::new(
                     &sodium_ctx.gc_ctx(),
+                    name.to_string(),
                     deconstructor,
                     trace
                 ),

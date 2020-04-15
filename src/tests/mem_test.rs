@@ -65,8 +65,8 @@ fn map_c_mem() {
     let sodium_ctx = &sodium_ctx;
     {
         let cs1: CellSink<i32> = sodium_ctx.new_cell_sink(3);
-        //let c1 = cs1.cell();
-        //let _c2 = c1.map(|a:&i32| a + 5);
+        let c1 = cs1.cell();
+        let _c2 = c1.map(|a:&i32| a + 5);
         //let l = _c2.listen_weak(|_:&i32| {});
         //l.unlisten();
     }

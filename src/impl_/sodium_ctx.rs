@@ -136,7 +136,7 @@ impl SodiumCtx {
             if let Some(ref null_node) = data.null_node_op {
                 return null_node.clone();
             }
-            let null_node = Node::new(self, || {}, Vec::new());
+            let null_node = Node::new(self, "null_node", || {}, Vec::new());
             // Do not include null_node against total node count
             self.dec_node_ref_count();
             self.dec_node_count();

@@ -21,6 +21,7 @@ pub struct GcNode {
 }
 
 struct GcNodeData {
+    name: String,
     freed: bool,
     ref_count: u32,
     ref_count_adj: u32,
@@ -232,6 +233,7 @@ impl GcCtx {
             if !i.with_data(|data: &mut GcNodeData| data.freed) {
                 trace!("collect_roots: freeing white node {}", i.id);
                 i.free();
+                self.with_data(|data: &mut GcCtxData| data.roots.retain(|root: &GcNode| root.id != i.id));
             }
         }
         let mut to_be_freed = Vec::new();
@@ -240,6 +242,7 @@ impl GcCtx {
             if !i.with_data(|data: &mut GcNodeData| data.freed) {
                 trace!("collect_roots: freeing to_be_freed node {}", i.id);
                 i.free();
+                self.with_data(|data: &mut GcCtxData| data.roots.retain(|root: &GcNode| root.id != i.id));
             }
         }
     }
@@ -258,10 +261,12 @@ impl GcCtx {
 
 impl GcNode {
     pub fn new<
+        NAME: ToString,
         DECONSTRUCTOR: 'static + Fn() + Send + Sync,
         TRACE: 'static + Fn(&mut Tracer) + Send + Sync
     >(
         gc_ctx: &GcCtx,
+        name: NAME,
         deconstructor: DECONSTRUCTOR,
         trace: TRACE
     ) -> GcNode {
@@ -269,6 +274,7 @@ impl GcNode {
             id: gc_ctx.make_id(),
             gc_ctx: gc_ctx.clone(),
             data: Arc::new(Mutex::new(GcNodeData {
+                name: name.to_string(),
                 freed: false,
                 ref_count: 1,
                 ref_count_adj: 0,
@@ -306,10 +312,11 @@ impl GcNode {
     }
 
     pub fn inc_ref(&self) {
+        let id = self.id;
         self.with_data(
             |data: &mut GcNodeData| {
                 if data.freed {
-                    panic!("inc_ref on freed node")
+                    panic!("gc_node {} inc_ref on freed node ({})", id, data.name);
                 }
                 data.ref_count = data.ref_count + 1;
                 data.color = Color::Black;
@@ -375,7 +382,12 @@ impl GcNode {
         self.with_data(|data: &mut GcNodeData| {
             std::mem::swap(&mut trace, &mut data.trace);
         });
-        trace(&mut tracer);
+        let mut tracer2 = |gc_node: &GcNode| {
+            if gc_node.with_data(|data: &mut GcNodeData| !data.freed) {
+                tracer(gc_node);
+            }
+        };
+        trace(&mut tracer2);
         self.with_data(|data: &mut GcNodeData| {
             std::mem::swap(&mut trace, &mut data.trace);
         });

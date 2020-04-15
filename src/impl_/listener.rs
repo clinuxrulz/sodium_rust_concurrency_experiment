@@ -64,7 +64,7 @@ impl Listener {
         }
         let listener = Listener {
             data: listener_data,
-            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), gc_node_desconstructor, gc_node_trace)
+            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "Listener::new", gc_node_desconstructor, gc_node_trace)
         };
         if !is_weak {
             sodium_ctx.with_data(|data: &mut SodiumCtxData| {

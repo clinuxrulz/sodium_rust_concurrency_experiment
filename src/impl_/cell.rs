@@ -88,12 +88,11 @@ impl<A:Send+'static> Cell<A> {
         }
         Cell {
             data: cell_data,
-            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), || {}, gc_node_trace)
+            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "Cell::new", || {}, gc_node_trace)
         }
     }
 
     pub fn _new(sodium_ctx: &SodiumCtx, stream: Stream<A>, value: Lazy<A>) -> Cell<A> where A: Clone {
-        let stream2 = stream.clone();
         let init_value =
             stream.with_firing_op(|firing_op: &mut Option<A>| {
                 if let Some(ref firing) = firing_op {
@@ -121,20 +120,21 @@ impl<A:Send+'static> Cell<A> {
         }
         let c = Cell {
             data: cell_data,
-            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), || {}, gc_node_trace)
+            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "Cell::hold", || {}, gc_node_trace)
         };
         let sodium_ctx = sodium_ctx.clone();
         let node: Node;
         {
             let c = c.clone();
             let c_gc_node = c.gc_node.clone();
-            let stream2 = Stream::downgrade(&stream2);
+            let stream_node = stream.node();
+            let stream_gc_node = stream.gc_node.clone();
             let sodium_ctx2 = sodium_ctx.clone();
             node = Node::new(
                 &sodium_ctx2,
+                "Cell::hold inner node",
                 move || {
-                    let stream2 = stream2.upgrade().unwrap();
-                    let firing_op = stream2.with_firing_op(|firing_op| firing_op.clone());
+                    let firing_op = stream.with_firing_op(|firing_op| firing_op.clone());
                     if let Some(firing) = firing_op {
                         let is_first =
                             c.with_data(|data: &mut CellData<A>| {
@@ -156,9 +156,9 @@ impl<A:Send+'static> Cell<A> {
                         }
                     }
                 },
-                vec![stream.node()]
+                vec![stream_node]
             );
-            node.add_update_dependencies(vec![c_gc_node]);
+            node.add_update_dependencies(vec![stream_gc_node, c_gc_node]);
         }
         c.with_data(|data: &mut CellData<A>| data.node = node);
         c
@@ -343,6 +343,7 @@ impl<A:Send+'static> Cell<A> {
         let sodium_ctx = csa.sodium_ctx();
         Stream::_new(
             &sodium_ctx,
+            "Cell::switch_s",
             |sa: &Stream<A>| {
                 let inner_s: Arc<Mutex<WeakStream<A>>> = Arc::new(Mutex::new(Stream::downgrade(&csa.sample())));
                 let sa = sa.clone();
@@ -352,6 +353,7 @@ impl<A:Send+'static> Cell<A> {
                     let sa = Stream::downgrade(&sa);
                     node1 = Node::new(
                         &sodium_ctx,
+                        "switch_s inner node",
                         move || {
                             let l = inner_s.lock();
                             let inner_s: &WeakStream<A> = l.as_ref().unwrap();
@@ -374,6 +376,7 @@ impl<A:Send+'static> Cell<A> {
                     let sodium_ctx2 = sodium_ctx.clone();
                     node2 = Node::new(
                         &sodium_ctx2,
+                        "switch_s outer node",
                         move || {
                             csa.updates().with_firing_op(|firing_op: &mut Option<Stream<A>>| {
                                 if let Some(ref firing) = firing_op {
@@ -412,9 +415,11 @@ impl<A:Send+'static> Cell<A> {
         let sodium_ctx = cca.sodium_ctx();
         Stream::_new(
             &sodium_ctx,
+            "Cell::switch_c",
             |sa: &Stream<A>| {
                 let node1 = Node::new(
                     &sodium_ctx,
+                    "switch_c outer node",
                     || {},
                     vec![cca.updates().node()]
                 );
@@ -422,6 +427,7 @@ impl<A:Send+'static> Cell<A> {
                 let last_inner_s = Arc::new(Mutex::new(Stream::downgrade(&init_inner_s)));
                 let node2 = Node::new(
                     &sodium_ctx,
+                    "switch_c inner node",
                     || {},
                     vec![node1.clone(), init_inner_s.node()]
                 );

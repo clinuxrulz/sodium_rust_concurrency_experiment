@@ -82,18 +82,14 @@ impl<A:Send+'static> Stream<A> {
     pub fn new(sodium_ctx: &SodiumCtx) -> Stream<A> {
         Stream::_new(
             sodium_ctx,
-            |s: &Stream<A>| {
-                let s = s.clone();
-                let s_gc_node = s.gc_node.clone();
-                let node = Node::new(
+            "Stream::new",
+            |_s: &Stream<A>| {
+                Node::new(
                     sodium_ctx,
-                    move || {
-                        s.nop();
-                    },
+                    "Stream::new node",
+                    || {},
                     Vec::new()
-                );
-                node.add_update_dependencies(vec![s_gc_node]);
-                node
+                )
             }
         )
     }
@@ -115,6 +111,7 @@ impl<A:Send+'static> Stream<A> {
                 })),
                 gc_node: GcNode::new(
                     &sodium_ctx.gc_ctx(),
+                    "Stream::_new_with_coalescer",
                     || {},
                     move |tracer: &mut Tracer| {
                         let l = result_forward_ref.lock();
@@ -137,7 +134,7 @@ impl<A:Send+'static> Stream<A> {
         result
     }
 
-    pub fn _new<MkNode:FnOnce(&Stream<A>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MkNode) -> Stream<A> {
+    pub fn _new<NAME:ToString,MkNode:FnOnce(&Stream<A>)->Node>(sodium_ctx: &SodiumCtx, name: NAME, mk_node: MkNode) -> Stream<A> {
         let result_forward_ref: Arc<Mutex<Option<Arc<Mutex<StreamData<A>>>>>> = Arc::new(Mutex::new(None));
         let s;
         {
@@ -151,6 +148,7 @@ impl<A:Send+'static> Stream<A> {
                 })),
                 gc_node: GcNode::new(
                     &sodium_ctx.gc_ctx(),
+                    name.to_string(),
                     || {},
                     move |tracer: &mut Tracer| {
                         let l = result_forward_ref.lock();
@@ -165,6 +163,7 @@ impl<A:Send+'static> Stream<A> {
             };
         }
         let node = mk_node(&s);
+        node.add_keep_alive(&s.gc_node);
         s.with_data(|data: &mut StreamData<A>| data.node = node.clone());
         {
             let mut l = result_forward_ref.lock();
@@ -208,17 +207,19 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, mut f: FN) -> Stream<B> {
-        let self_ = Stream::downgrade(self);
+        let self_ = self.clone();//Stream::downgrade(self);
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
+            "Stream::map",
             |s: &Stream<B>| {
                 let _s = s.clone();
                 let f_deps = lambda1_deps(&f);
                 let node = Node::new(
                     &sodium_ctx,
+                    "Stream::map node",
                     move || {
-                        let self_ = self_.upgrade().unwrap();
+                        //let self_ = self_.upgrade().unwrap();
                         self_.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
                                 _s._send(f.call(firing));
@@ -228,7 +229,7 @@ impl<A:Send+'static> Stream<A> {
                     vec![self.node()]
                 );
                 node.add_update_dependencies(f_deps);
-                node.add_update_dependencies(vec![s.gc_node.clone()]);
+                node.add_update_dependencies(vec![self.gc_node.clone(), s.gc_node.clone()]);
                 node
             }
         )
@@ -239,11 +240,13 @@ impl<A:Send+'static> Stream<A> {
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
+            "Stream::filter",
             |s: &Stream<A>| {
                 let _s = s.clone();
                 let pred_deps = lambda1_deps(&pred);
                 let node = Node::new(
                     &sodium_ctx,
+                    "Stream::filter node",
                     move || {
                         let self_ = self_.upgrade().unwrap();
                         self_.with_firing_op(|firing_op: &mut Option<A>| {
@@ -272,6 +275,7 @@ impl<A:Send+'static> Stream<A> {
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
+            "Stream::merge",
             |s: &Stream<A>| {
                 let _s = s.clone();
                 let _s2 = s2.clone();
@@ -280,6 +284,7 @@ impl<A:Send+'static> Stream<A> {
                 let f_deps = lambda2_deps(&f);
                 let node = Node::new(
                     &sodium_ctx,
+                    "Stream::merge node",
                     move || {
                         let _self_op = _self.upgrade();
                         let _s2_op = _s2.upgrade();
@@ -379,6 +384,7 @@ impl<A:Send+'static> Stream<A> {
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
+            "Stream::once",
             |s: &Stream<A>| {
                 let s_ = s.clone();
                 let sodium_ctx = sodium_ctx.clone();
@@ -386,6 +392,7 @@ impl<A:Send+'static> Stream<A> {
                 let _self = Stream::downgrade(self);
                 let node = Node::new(
                     &sodium_ctx2,
+                    "Stream::once node",
                     move || {
                         let _self = _self.upgrade().unwrap();
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
@@ -417,6 +424,7 @@ impl<A:Send+'static> Stream<A> {
         let node =
             Node::new(
                 &self.sodium_ctx(),
+                "Stream::listen node",
                 move || {
                     let self_ = self_.upgrade().unwrap();
                     self_.with_data(|data: &mut StreamData<A>| {

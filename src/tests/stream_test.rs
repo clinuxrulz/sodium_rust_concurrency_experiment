@@ -764,6 +764,7 @@ fn switch_s_simultaneous() {
 
 #[test]
 fn loop_cell() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     {

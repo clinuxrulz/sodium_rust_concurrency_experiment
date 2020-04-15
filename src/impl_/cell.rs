@@ -20,13 +20,13 @@ use std::sync::Mutex;
 use std::sync::Weak;
 
 pub struct Cell<A> {
-    data: Arc<Mutex<CellData<A>>>,
-    gc_node: GcNode
+    pub data: Arc<Mutex<CellData<A>>>,
+    pub gc_node: GcNode
 }
 
 pub struct WeakCell<A> {
-    data: Weak<Mutex<CellData<A>>>,
-    gc_node: GcNode
+    pub data: Weak<Mutex<CellData<A>>>,
+    pub gc_node: GcNode
 }
 
 impl<A> Clone for Cell<A> {

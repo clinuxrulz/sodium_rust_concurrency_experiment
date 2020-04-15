@@ -1,21 +1,31 @@
-use crate::impl_::stream_loop::StreamLoop;
 use crate::impl_::cell::Cell;
+use crate::impl_::gc_node::{GcNode, Tracer};
 use crate::impl_::lazy::Lazy;
 use crate::impl_::sodium_ctx::SodiumCtx;
+use crate::impl_::stream_loop::StreamLoop;
 
 use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
 
 pub struct CellLoop<A> {
-    pub data: Arc<Mutex<CellLoopData<A>>>
+    pub data: Arc<Mutex<CellLoopData<A>>>,
+    pub gc_node: GcNode
 }
 
 impl<A> Clone for CellLoop<A> {
     fn clone(&self) -> Self {
+        self.gc_node.inc_ref();
         CellLoop {
-            data: self.data.clone()
+            data: self.data.clone(),
+            gc_node: self.gc_node.clone()
         }
+    }
+}
+
+impl<A> Drop for CellLoop<A> {
+    fn drop(&mut self) {
+        self.gc_node.dec_ref();
     }
 }
 
@@ -45,12 +55,25 @@ impl<A:Send+Clone+'static> CellLoop<A> {
         }
         let stream_loop = StreamLoop::new(sodium_ctx);
         let stream = stream_loop.stream();
-        CellLoop {
-            data: Arc::new(Mutex::new(CellLoopData {
+        let cell_loop_data =
+            Arc::new(Mutex::new(CellLoopData {
                 stream_loop: stream_loop,
                 cell: stream.hold_lazy(init_value),
                 init_value_op
-            }))
+            }));
+        let gc_node_trace;
+        {
+            let cell_loop_data = cell_loop_data.clone();
+            gc_node_trace = move |tracer: &mut Tracer| {
+                let l = cell_loop_data.lock();
+                let cell_loop_data = l.as_ref().unwrap();
+                tracer(&cell_loop_data.stream_loop.gc_node);
+                tracer(&cell_loop_data.cell.gc_node);
+            };
+        }
+        CellLoop {
+            data: cell_loop_data,
+            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "CellLoop::new", || {}, gc_node_trace)
         }
     }
 

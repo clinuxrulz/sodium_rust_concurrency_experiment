@@ -23,8 +23,8 @@ pub struct GcNode {
 struct GcNodeData {
     name: String,
     freed: bool,
-    ref_count: u32,
-    ref_count_adj: u32,
+    ref_count: i32,
+    ref_count_adj: i32,
     visited: bool,
     color: Color,
     buffered: bool,
@@ -122,7 +122,7 @@ impl GcCtx {
         trace!("end: mark_roots");
     }
 
-    fn check_ref_counts_restored(&self, s: &GcNode) {
+    fn restore_ref_counts(&self, s: &GcNode) {
         let was_visited = 
             s.with_data(|data: &mut GcNodeData| {
                 if data.visited {
@@ -134,12 +134,8 @@ impl GcCtx {
         if was_visited {
             return;
         }
-        let ref_count_restored =
-            s.with_data(|data: &mut GcNodeData| data.ref_count_adj == 0);
-        if !ref_count_restored {
-            panic!("ref counts were not restored");
-        }
-        s.trace(|t| self.check_ref_counts_restored(t));
+        s.with_data(|data: &mut GcNodeData| data.ref_count_adj = 0);
+        s.trace(|t| self.restore_ref_counts(t));
         s.with_data(|data: &mut GcNodeData| data.visited = false);
     }
 
@@ -174,7 +170,7 @@ impl GcCtx {
             self.scan(root);
         }
         for root in &roots {
-            self.check_ref_counts_restored(&root);
+            self.restore_ref_counts(&root);
         }
         self.with_data(
             |data: &mut GcCtxData|
@@ -200,7 +196,7 @@ impl GcCtx {
             s.trace(|t| {
                 self.scan(t);
                 trace!("scan: gc node {} inc ref count", t.id);
-                t.with_data(|data: &mut GcNodeData| data.ref_count_adj = 0);
+                t.with_data(|data: &mut GcNodeData| data.ref_count_adj = data.ref_count_adj - 1);
             });
         }
     }
@@ -212,7 +208,7 @@ impl GcCtx {
             trace!("scan_black: gc node {} inc ref count", t.id);
             let color =
                 t.with_data(|data: &mut GcNodeData| {
-                    data.ref_count_adj = 0;
+                    data.ref_count_adj = data.ref_count_adj - 1;
                     data.color
                 });
             if color != Color::Black {
@@ -297,7 +293,7 @@ impl GcNode {
         k(data)
     }
 
-    pub fn ref_count(&self) -> u32 {
+    pub fn ref_count(&self) -> i32 {
         self.with_data(|data: &mut GcNodeData| data.ref_count)
     }
 

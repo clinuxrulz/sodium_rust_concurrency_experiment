@@ -295,9 +295,11 @@ impl GcNode {
     }
 
     pub fn free(&self) {
-        let mut deconstructor = self.data.deconstructor.write().unwrap();
         let mut tmp: Box<dyn Fn() + Send + Sync + 'static> = Box::new(|| {});
-        std::mem::swap(&mut *deconstructor, &mut tmp);
+        {
+            let mut deconstructor = self.data.deconstructor.write().unwrap();
+            std::mem::swap(&mut *deconstructor, &mut tmp);
+        }
         tmp();
         let mut trace = self.data.trace.write().unwrap();
         *trace = Box::new(|_tracer: &mut Tracer| {});

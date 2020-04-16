@@ -46,7 +46,7 @@ impl<A:Clone+Send+'static> Cell<A> {
         Stream { impl_: self.impl_.value() }
     }
 
-    pub fn map<B:Clone+Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, f: FN) -> Cell<B> {
+    pub fn map<B:Clone+Send+'static,FN:IsLambda1<A,B>+Send+Sync+'static>(&self, f: FN) -> Cell<B> {
         Cell { impl_: self.impl_.map(f) }
     }
 

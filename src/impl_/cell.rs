@@ -189,7 +189,10 @@ impl<A:Send+'static> Cell<A> {
                     let a = self_.with_data(|data: &mut CellData<A>| data.value.run());
                     sodium_ctx2.transaction(|| {
                         let node = spark.node();
-                        node.with_data(|data: &mut NodeData| { data.changed = true; });
+                        {
+                            let changed = node.data.changed.write().unwrap();
+                            *changed = true;
+                        }
                         sodium_ctx2.with_data(|data: &mut SodiumCtxData| data.changed_nodes.push(node));
                         spark._send(a.clone());
                     });
@@ -199,7 +202,7 @@ impl<A:Send+'static> Cell<A> {
         })
     }
 
-    pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, mut f: FN) -> Cell<B> where A: Clone, B: Clone {
+    pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+Sync+'static>(&self, mut f: FN) -> Cell<B> where A: Clone, B: Clone {
         let init = f.call(&self.sample());
         self.updates().map(f).hold(init)
     }
@@ -384,10 +387,11 @@ impl<A:Send+'static> Cell<A> {
                                     let node1 = node1.clone();
                                     let inner_s = inner_s.clone();
                                     sodium_ctx.pre_post(move || {
-                                        let old_deps =
-                                        node1.with_data(|data: &mut NodeData| {
-                                            data.dependencies.clone()
-                                        });
+                                        let old_deps;
+                                        {
+                                            let dependencies = node1.data.dependencies.read().unwrap();
+                                            old_deps = (*dependencies).clone();
+                                        }
                                         for dep in old_deps {
                                             node1.remove_dependency(&dep);
                                         }
@@ -447,8 +451,14 @@ impl<A:Send+'static> Cell<A> {
                                 let sa = sa.upgrade().unwrap();
                                 sa._send(firing.sample());
                                 //
-                                node1.with_data(|data: &mut NodeData| data.changed = true);
-                                node2.with_data(|data: &mut NodeData| data.changed = true);
+                                {
+                                    let changed = node1.data.changed.write().unwrap();
+                                    *changed = true;
+                                }
+                                {
+                                    let changed = node2.data.changed.write().unwrap();
+                                    *changed = true;
+                                }
                                 let new_inner_s = firing.updates();
                                 new_inner_s.with_firing_op(|firing2_op: &mut Option<A>| {
                                     if let Some(ref firing2) = firing2_op {
@@ -459,14 +469,20 @@ impl<A:Send+'static> Cell<A> {
                                 let last_inner_s: &mut WeakStream<A> = l.as_mut().unwrap();
                                 node2.remove_dependency(&last_inner_s.upgrade().unwrap().node());
                                 node2.add_dependency(new_inner_s.node());
-                                node2.with_data(|data: &mut NodeData| data.changed = true);
+                                {
+                                    let changed = node2.data.changed.write().unwrap();
+                                    *changed = true;
+                                }
                                 *last_inner_s = Stream::downgrade(&new_inner_s);
                             }
                         });
                     };
                 }
                 node1.add_update_dependencies(vec![node1.gc_node.clone(), node2.gc_node.clone()]);
-                node1.with_data(|data: &mut NodeData| data.update = Box::new(node1_update));
+                {
+                    let update = node1.data.update.write().unwrap();
+                    *update = Box::new(node1_update);
+                }
                 {
                     let last_inner_s = last_inner_s.clone();
                     let sa = Stream::downgrade(sa);
@@ -481,7 +497,10 @@ impl<A:Send+'static> Cell<A> {
                             }
                         });
                     };
-                    node2.with_data(|data: &mut NodeData| data.update = Box::new(node2_update));
+                    {
+                        let update = node2.data.update.write().unwrap();
+                        *update = Box::new(node2_update);
+                    }
                 }
                 node2
             }
@@ -489,13 +508,13 @@ impl<A:Send+'static> Cell<A> {
         .hold_lazy(Lazy::new(move || cca2.sample().sample()))
     }
 
-    pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, k: K) -> Listener where A: Clone {
+    pub fn listen_weak<K: FnMut(&A)+Send+Sync+'static>(&self, k: K) -> Listener where A: Clone {
         self.sodium_ctx().transaction(|| {
             self.value().listen_weak(k)
         })
     }
 
-    pub fn listen<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener where A: Clone {
+    pub fn listen<K:IsLambda1<A,()>+Send+Sync+'static>(&self, k: K) -> Listener where A: Clone {
         self.sodium_ctx().transaction(|| {
             self.value().listen(k)
         })

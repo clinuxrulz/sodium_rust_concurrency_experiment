@@ -171,30 +171,28 @@ impl<A:Send+'static> Stream<A> {
             let result_forward_ref: &mut Option<Arc<Mutex<StreamData<A>>>> = &mut result_forward_ref;
             *result_forward_ref = Some(s.data.clone());
         }
-        let mut update: Box<dyn FnMut()+Send> = Box::new(|| {});
-        node.with_data(|data: &mut NodeData| {
-            mem::swap(&mut update, &mut data.update);
-        });
+        let update = node.data.update.read().unwrap();
         update();
-        node.with_data(|data: &mut NodeData| {
-            mem::swap(&mut update, &mut data.update);
-        });
         let is_firing =
             s.with_data(|data: &mut StreamData<A>| data.firing_op.is_some());
         if is_firing {
-            s.node().with_data(|data: &mut NodeData| data.changed = true);
+            {
+                let changed = s.node().data.changed.write().unwrap();
+                *changed = true;
+            }
             let s = s.clone();
             sodium_ctx.pre_post(move || {
                 s.with_data(|data: &mut StreamData<A>| {
                     data.firing_op = None;
-                    data.node.with_data(|data: &mut NodeData| data.changed = false);
+                    let changed = s.node().data.changed.write().unwrap();
+                    *changed = true;
                 });
             });
         }
         s
     }
 
-    pub fn snapshot<B:Send+Clone+'static,C:Send+'static,FN:IsLambda2<A,B,C>+Send+'static>(&self, cb: &Cell<B>, mut f: FN) -> Stream<C> {
+    pub fn snapshot<B:Send+Clone+'static,C:Send+'static,FN:IsLambda2<A,B,C>+Send+Sync+'static>(&self, cb: &Cell<B>, mut f: FN) -> Stream<C> {
         let cb = cb.clone();
         let cb_node = cb.node();
         let mut f_deps = lambda2_deps(&f);
@@ -206,7 +204,7 @@ impl<A:Send+'static> Stream<A> {
         self.snapshot(cb, |_a: &A, b: &B| b.clone())
     }
 
-    pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, mut f: FN) -> Stream<B> {
+    pub fn map<B:Send+'static,FN:IsLambda1<A,B>+Send+Sync+'static>(&self, mut f: FN) -> Stream<B> {
         let self_ = self.clone();
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
@@ -234,7 +232,7 @@ impl<A:Send+'static> Stream<A> {
         )
     }
 
-    pub fn filter<PRED:IsLambda1<A,bool>+Send+'static>(&self, mut pred: PRED) -> Stream<A> where A: Clone {
+    pub fn filter<PRED:IsLambda1<A,bool>+Send+Sync+'static>(&self, mut pred: PRED) -> Stream<A> where A: Clone {
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
@@ -268,7 +266,7 @@ impl<A:Send+'static> Stream<A> {
         self.merge(s2, |lhs:&A, _rhs:&A| lhs.clone())
     }
 
-    pub fn merge<FN:IsLambda2<A,A,A>+Send+'static>(&self, s2: &Stream<A>, mut f: FN) -> Stream<A> where A: Clone {
+    pub fn merge<FN:IsLambda2<A,A,A>+Send+Sync+'static>(&self, s2: &Stream<A>, mut f: FN) -> Stream<A> where A: Clone {
         let _self = self.clone();
         let s2 = s2.clone();
         let sodium_ctx = self.sodium_ctx().clone();
@@ -328,7 +326,7 @@ impl<A:Send+'static> Stream<A> {
     pub fn collect_lazy<B,S,F>(&self, init_state: Lazy<S>, f: F) -> Stream<B>
         where B: Send + Clone + 'static,
               S: Send + Clone + 'static,
-              F: IsLambda2<A,S,(B,S)> + Send + 'static
+              F: IsLambda2<A,S,(B,S)> + Send + Sync + 'static
     {
         let sodium_ctx = self.sodium_ctx();
         sodium_ctx.transaction(|| {
@@ -345,7 +343,7 @@ impl<A:Send+'static> Stream<A> {
 
     pub fn accum_lazy<S,F>(&self, init_state: Lazy<S>, f: F) -> Cell<S>
         where S: Send + Clone + 'static,
-              F: IsLambda2<A,S,S> + Send + 'static
+              F: IsLambda2<A,S,S> + Send + Sync + 'static
     {
         let sodium_ctx = self.sodium_ctx();
         let sodium_ctx = &sodium_ctx;
@@ -395,10 +393,11 @@ impl<A:Send+'static> Stream<A> {
                                 s_._send(firing.clone());
                                 let node = s_.node();
                                 sodium_ctx.post(move || {
-                                    let deps =
-                                        node.with_data(|data: &mut NodeData| {
-                                            data.dependencies.clone()
-                                        });
+                                    let deps;
+                                    {
+                                        let dependencies = node.data.dependencies.write().unwrap();
+                                        deps = (*dependencies).clone();
+                                    }
                                     for dep in deps {
                                         node.remove_dependency(&dep);
                                     }
@@ -414,7 +413,7 @@ impl<A:Send+'static> Stream<A> {
         )
     }
 
-    pub fn _listen<K:IsLambda1<A,()>+Send+'static>(&self, mut k: K, weak: bool) -> Listener {
+    pub fn _listen<K:IsLambda1<A,()>+Send+Sync+'static>(&self, mut k: K, weak: bool) -> Listener {
         let self_ = self.clone();
         let self_gc_node = self.gc_node.clone();
         let node =
@@ -434,11 +433,11 @@ impl<A:Send+'static> Stream<A> {
         Listener::new(&self.sodium_ctx(), weak, node)
     }
 
-    pub fn listen_weak<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
+    pub fn listen_weak<K:IsLambda1<A,()>+Send+Sync+'static>(&self, k: K) -> Listener {
         self._listen(k, true)
     }
 
-    pub fn listen<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
+    pub fn listen<K:IsLambda1<A,()>+Send+Sync+'static>(&self, k: K) -> Listener {
         self._listen(k, false)
     }
 
@@ -460,13 +459,19 @@ impl<A:Send+'static> Stream<A> {
                 }
                 is_first
             });
-            self.node().with_data(|data: &mut NodeData| data.changed = true);
+            {
+                let changed = self.node().data.changed.write().unwrap();
+                *changed = true;
+            }
             if is_first {
                 let _self = self.clone();
                 sodium_ctx.pre_post(move || {
                     _self.with_data(|data: &mut StreamData<A>| {
                         data.firing_op = None;
-                        data.node.with_data(|data: &mut NodeData| data.changed = false);
+                        {
+                            let changed = _self.node().data.changed.write().unwrap();
+                            *changed = false;
+                        }
                     });
                 });
             }

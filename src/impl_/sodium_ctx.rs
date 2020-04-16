@@ -164,14 +164,13 @@ impl SodiumCtx {
 
     pub fn add_dependents_to_changed_nodes(&self, node: Node) {
         self.with_data(|data: &mut SodiumCtxData| {
-            node.with_data(|data2: &mut NodeData| {
-                data2.dependents
-                    .iter()
-                    .flat_map(|node: &WeakNode| node.upgrade())
-                    .for_each(|node: Node| {
-                        data.changed_nodes.push(node);
-                    });
-            });
+            let node_dependents = node.data.dependents.read().unwrap();
+            node_dependents
+                .iter()
+                .flat_map(|node: &WeakNode| node.upgrade())
+                .for_each(|node: Node| {
+                    data.changed_nodes.push(node);
+                });
         });
     }
 
@@ -283,19 +282,25 @@ impl SodiumCtx {
     }
 
     pub fn update_node(&self, node: &Node) {
-        let bail = node.with_data(|data: &mut NodeData| data.visited.clone());
+        let bail;
+        {
+            let visited = node.data.visited.write().unwrap();
+            bail = *visited;
+            *visited = true;
+        }
         if bail {
             return;
         }
-        let dependencies: Vec<Node> =
-            node.with_data(|data: &mut NodeData| {
-                data.visited = true;
-                data.dependencies.clone()
-            });
+        let dependencies: Vec<Node>;
+        {
+            let dependencies2 = node.data.dependencies.read().unwrap();
+            dependencies = dependencies2.clone();
+        }
         {
             let node = node.clone();
             self.pre_post(move || {
-                node.with_data(|data: &mut NodeData| data.visited = false);
+                let visited = node.data.visited.write().unwrap();
+                *visited = false;
             });
         }
         // visit dependencies
@@ -305,7 +310,7 @@ impl SodiumCtx {
             let _self = self.clone();
             handle = self.threaded_mode.spawn(move || {
                 for dependency in &dependencies {
-                    let visit_it = dependency.with_data(|data: &mut NodeData| !data.visited);
+                    let visit_it = !*dependency.data.visited.read().unwrap();
                     if visit_it {
                         _self.update_node(dependency);
                     }
@@ -317,17 +322,11 @@ impl SodiumCtx {
         let any_changed =
             dependencies
                 .iter()
-                .any(|node: &Node| { node.with_data(|data: &mut NodeData| data.changed) });
+                .any(|node: &Node| { *node.data.changed.read().unwrap() });
         // if dependencies changed, then execute update on current node
         if any_changed {
-            let mut update: Box<dyn FnMut()+Send> = Box::new(|| {});
-            node.with_data(|data: &mut NodeData| {
-                mem::swap(&mut update, &mut data.update);
-            });
+            let update = node.data.update.read().unwrap();
             update();
-            node.with_data(|data: &mut NodeData| {
-                mem::swap(&mut update, &mut data.update);
-            });
         }
         // if self changed then update dependents
         if node.with_data(|data: &mut NodeData| data.changed) {

@@ -190,7 +190,7 @@ impl<A:Send+'static> Cell<A> {
                     sodium_ctx2.transaction(|| {
                         let node = spark.node();
                         {
-                            let changed = node.data.changed.write().unwrap();
+                            let mut changed = node.data.changed.write().unwrap();
                             *changed = true;
                         }
                         sodium_ctx2.with_data(|data: &mut SodiumCtxData| data.changed_nodes.push(node));
@@ -452,11 +452,11 @@ impl<A:Send+'static> Cell<A> {
                                 sa._send(firing.sample());
                                 //
                                 {
-                                    let changed = node1.data.changed.write().unwrap();
+                                    let mut changed = node1.data.changed.write().unwrap();
                                     *changed = true;
                                 }
                                 {
-                                    let changed = node2.data.changed.write().unwrap();
+                                    let mut changed = node2.data.changed.write().unwrap();
                                     *changed = true;
                                 }
                                 let new_inner_s = firing.updates();
@@ -470,7 +470,7 @@ impl<A:Send+'static> Cell<A> {
                                 node2.remove_dependency(&last_inner_s.upgrade().unwrap().node());
                                 node2.add_dependency(new_inner_s.node());
                                 {
-                                    let changed = node2.data.changed.write().unwrap();
+                                    let mut changed = node2.data.changed.write().unwrap();
                                     *changed = true;
                                 }
                                 *last_inner_s = Stream::downgrade(&new_inner_s);
@@ -480,7 +480,7 @@ impl<A:Send+'static> Cell<A> {
                 }
                 node1.add_update_dependencies(vec![node1.gc_node.clone(), node2.gc_node.clone()]);
                 {
-                    let update = node1.data.update.write().unwrap();
+                    let mut update = node1.data.update.write().unwrap();
                     *update = Box::new(node1_update);
                 }
                 {
@@ -498,7 +498,7 @@ impl<A:Send+'static> Cell<A> {
                         });
                     };
                     {
-                        let update = node2.data.update.write().unwrap();
+                        let mut update = node2.data.update.write().unwrap();
                         *update = Box::new(node2_update);
                     }
                 }

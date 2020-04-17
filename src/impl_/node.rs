@@ -74,29 +74,29 @@ impl Node {
                 }
                 let mut dependencies = Vec::new();
                 {
-                    let dependencies2 = node.data.dependencies.read().unwrap();
+                    let mut dependencies2 = node.data.dependencies.write().unwrap();
                     std::mem::swap(&mut *dependencies2, &mut dependencies);
                 }
                 let mut dependents = Vec::new();
                 {
-                    let dependents2 = node.data.dependents.read().unwrap();
+                    let mut dependents2 = node.data.dependents.write().unwrap();
                     std::mem::swap(&mut *dependents2, &mut dependents);
                 }
                 let mut keep_alive = Vec::new();
                 {
-                    let keep_alive2 = node.data.keep_alive.read().unwrap();
+                    let mut keep_alive2 = node.data.keep_alive.write().unwrap();
                     std::mem::swap(&mut *keep_alive2, &mut keep_alive);
                 }
                 {
-                    let update_dependencies = node.data.update_dependencies.write().unwrap();
+                    let mut update_dependencies = node.data.update_dependencies.write().unwrap();
                     update_dependencies.clear();
                 }
                 {
-                    let update = node.data.update.write().unwrap();
+                    let mut update = node.data.update.write().unwrap();
                     *update = Box::new(|| {});
                 }
                 for dependency in dependencies {
-                    let dependency_dependents = dependency.data.dependents.write().unwrap();
+                    let mut dependency_dependents = dependency.data.dependents.write().unwrap();
                     dependency_dependents.retain(|dependent| !Arc::ptr_eq(&dependent.data, &node.data));
                 }
                 for gc_node in keep_alive {
@@ -161,7 +161,7 @@ impl Node {
             *result_forward_ref = Some(Node::downgrade(&result));
         }
         for dependency in dependencies {
-            let dependency_dependents = dependency.data.dependents.write().unwrap();
+            let mut dependency_dependents = dependency.data.dependents.write().unwrap();
             dependency_dependents.push(Node::downgrade(&result));
         }
         sodium_ctx.inc_node_ref_count();
@@ -170,7 +170,7 @@ impl Node {
     }
 
     pub fn add_update_dependencies(&self, update_dependencies: Vec<GcNode>) {
-        let update_dependencies2 = self.data.update_dependencies.write().unwrap();
+        let mut update_dependencies2 = self.data.update_dependencies.write().unwrap();
         for dep in update_dependencies {
             update_dependencies2.push(dep);
         }
@@ -178,29 +178,29 @@ impl Node {
 
     pub fn add_dependency(&self, dependency: Node) {
         {
-            let dependencies = self.data.dependencies.write().unwrap();
-            dependencies.push(dependency);
+            let mut dependencies = self.data.dependencies.write().unwrap();
+            dependencies.push(dependency.clone());
         }
         {
-            let dependency_dependents = dependency.data.dependents.write().unwrap();
+            let mut dependency_dependents = dependency.data.dependents.write().unwrap();
             dependency_dependents.push(Node::downgrade(self));
         }
     }
 
     pub fn remove_dependency(&self, dependency: &Node) {
         {
-            let dependencies = self.data.dependencies.write().unwrap();
+            let mut dependencies = self.data.dependencies.write().unwrap();
             dependencies.retain(|n: &Node| !Arc::ptr_eq(&n.data, &dependency.data));
         }
         {
-            let dependency_dependents = dependency.data.dependents.write().unwrap();
+            let mut dependency_dependents = dependency.data.dependents.write().unwrap();
             dependency_dependents.retain(|n: &WeakNode| !Arc::ptr_eq(&n.data, &self.data));
         }
     }
 
     pub fn add_keep_alive(&self, gc_node: &GcNode) {
         gc_node.inc_ref();
-        let keep_alive = self.data.keep_alive.write().unwrap();
+        let mut keep_alive = self.data.keep_alive.write().unwrap();
         keep_alive.push(gc_node.clone());
     }
 

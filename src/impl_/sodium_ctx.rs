@@ -284,7 +284,7 @@ impl SodiumCtx {
     pub fn update_node(&self, node: &Node) {
         let bail;
         {
-            let visited = node.data.visited.write().unwrap();
+            let mut visited = node.data.visited.write().unwrap();
             bail = *visited;
             *visited = true;
         }
@@ -299,7 +299,7 @@ impl SodiumCtx {
         {
             let node = node.clone();
             self.pre_post(move || {
-                let visited = node.data.visited.write().unwrap();
+                let mut visited = node.data.visited.write().unwrap();
                 *visited = false;
             });
         }
@@ -325,14 +325,13 @@ impl SodiumCtx {
                 .any(|node: &Node| { *node.data.changed.read().unwrap() });
         // if dependencies changed, then execute update on current node
         if any_changed {
-            let update = node.data.update.read().unwrap();
+            let mut update = node.data.update.write().unwrap();
+            let update: &mut Box<_> = &mut *update;
             update();
         }
         // if self changed then update dependents
-        if node.with_data(|data: &mut NodeData| data.changed) {
-            let dependents = node.with_data(|data: &mut NodeData| {
-                data.dependents.clone()
-            });
+        if *node.data.changed.read().unwrap() {
+            let dependents = node.data.dependents.read().unwrap().clone();
             {
                 let dependents = dependents.clone();
                 let _self = self.clone();

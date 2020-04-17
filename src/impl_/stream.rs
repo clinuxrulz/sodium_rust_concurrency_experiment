@@ -171,20 +171,25 @@ impl<A:Send+'static> Stream<A> {
             let result_forward_ref: &mut Option<Arc<Mutex<StreamData<A>>>> = &mut result_forward_ref;
             *result_forward_ref = Some(s.data.clone());
         }
-        let update = node.data.update.read().unwrap();
-        update();
+        {
+            let mut update = node.data.update.write().unwrap();
+            let update: &mut Box<_> = &mut update;
+            update();
+        }
         let is_firing =
             s.with_data(|data: &mut StreamData<A>| data.firing_op.is_some());
         if is_firing {
             {
-                let changed = s.node().data.changed.write().unwrap();
+                let s_node = s.node();
+                let mut changed = s_node.data.changed.write().unwrap();
                 *changed = true;
             }
             let s = s.clone();
             sodium_ctx.pre_post(move || {
                 s.with_data(|data: &mut StreamData<A>| {
                     data.firing_op = None;
-                    let changed = s.node().data.changed.write().unwrap();
+                    let s_node = s.node();
+                    let mut changed = s_node.data.changed.write().unwrap();
                     *changed = true;
                 });
             });
@@ -460,7 +465,8 @@ impl<A:Send+'static> Stream<A> {
                 is_first
             });
             {
-                let changed = self.node().data.changed.write().unwrap();
+                let self_node = self.node();
+                let mut changed = self_node.data.changed.write().unwrap();
                 *changed = true;
             }
             if is_first {
@@ -469,7 +475,8 @@ impl<A:Send+'static> Stream<A> {
                     _self.with_data(|data: &mut StreamData<A>| {
                         data.firing_op = None;
                         {
-                            let changed = _self.node().data.changed.write().unwrap();
+                            let self_node = _self.node();
+                            let mut changed = self_node.data.changed.write().unwrap();
                             *changed = false;
                         }
                     });

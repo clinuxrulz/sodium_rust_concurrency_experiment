@@ -25,7 +25,7 @@ pub struct GcNode {
 
 struct GcNodeData {
     freed: Cell<bool>,
-    ref_count: Cell<u32>,
+    ref_count: Cell<i32>,
     color: Cell<Color>,
     buffered: Cell<bool>,
     deconstructor: RwLock<Box<dyn Fn()+Send+Sync>>,
@@ -206,7 +206,7 @@ impl GcCtx {
     }
 
     fn collect_white(&self, s: &GcNode, white: &mut Vec<GcNode>) {
-        if s.data.color.get() == Color::White {
+        if s.data.color.get() == Color::White && !s.data.buffered.get() {
             s.data.color.set(Color::Black);
             s.trace(|t| {
                 self.collect_white(t, white);
@@ -242,7 +242,7 @@ impl GcNode {
         }
     }
 
-    pub fn ref_count(&self) -> u32 {
+    pub fn ref_count(&self) -> i32 {
         self.data.ref_count.get()
     }
 

@@ -59,7 +59,7 @@ impl Drop for NodeData {
 
 impl Node {
     pub fn new<NAME:ToString,UPDATE:FnMut()+Send+Sync+'static>(sodium_ctx: &SodiumCtx, name:NAME, update: UPDATE, dependencies: Vec<Node>) -> Self {
-        let result_forward_ref: Arc<Mutex<Option<WeakNode>>> = Arc::new(Mutex::new(None));
+        let result_forward_ref: Arc<RwLock<Option<WeakNode>>> = Arc::new(RwLock::new(None));
         let deconstructor;
         let trace;
         { // deconstructor
@@ -67,9 +67,8 @@ impl Node {
             deconstructor = move || {
                 let node;
                 {
-                    let l = result_forward_ref.lock();
-                    let node2 = l.as_ref().unwrap();
-                    let node2: &Option<WeakNode> = &node2;
+                    let node1 = result_forward_ref.read().unwrap();
+                    let node2: &Option<WeakNode> = &*node1;
                     node = node2.clone().unwrap();
                 }
                 let mut dependencies = Vec::new();
@@ -107,9 +106,8 @@ impl Node {
         { // trace
             let result_forward_ref = result_forward_ref.clone();
             trace = move |tracer: &mut Tracer| {
-                let l = result_forward_ref.lock();
-                let node2 = l.as_ref().unwrap();
-                let node2: &Option<WeakNode> = &node2;
+                let node1 = result_forward_ref.read().unwrap();
+                let node2: &Option<WeakNode> = &*node1;
                 if let &Some(ref node) = node2 {
                     {
                         let dependencies = node.data.dependencies.read().unwrap();
@@ -155,9 +153,7 @@ impl Node {
             };
         {
             let result = result.clone();
-            let mut l = result_forward_ref.lock();
-            let mut result_forward_ref = l.as_mut().unwrap();
-            let result_forward_ref: &mut Option<WeakNode> = &mut result_forward_ref;
+            let mut result_forward_ref = result_forward_ref.write().unwrap();
             *result_forward_ref = Some(Node::downgrade(&result));
         }
         for dependency in dependencies {

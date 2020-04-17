@@ -471,11 +471,11 @@ impl<A:Send+'static> Stream<A> {
             }
             if is_first {
                 let _self = self.clone();
+                let self_node = _self.node();
                 sodium_ctx.pre_post(move || {
                     _self.with_data(|data: &mut StreamData<A>| {
                         data.firing_op = None;
                         {
-                            let self_node = _self.node();
                             let mut changed = self_node.data.changed.write().unwrap();
                             *changed = false;
                         }

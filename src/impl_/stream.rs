@@ -151,13 +151,17 @@ impl<A:Send+'static> Stream<A> {
                     name.to_string(),
                     || {},
                     move |tracer: &mut Tracer| {
-                        let l = result_forward_ref.lock();
-                        let s = l.as_ref().unwrap();
-                        let s: &Option<Arc<Mutex<StreamData<A>>>> = &s;
-                        let s: Arc<Mutex<StreamData<A>>> = s.clone().unwrap();
-                        let l = s.lock();
-                        let s = l.as_ref().unwrap();
-                        tracer(&s.node.gc_node);
+                        let gc_node;
+                        {
+                            let l = result_forward_ref.lock();
+                            let s = l.as_ref().unwrap();
+                            let s: &Option<Arc<Mutex<StreamData<A>>>> = &s;
+                            let s: Arc<Mutex<StreamData<A>>> = s.clone().unwrap();
+                            let l = s.lock();
+                            let s = l.as_ref().unwrap();
+                            gc_node = s.node.gc_node.clone();
+                        }
+                        tracer(&gc_node);
                     }
                 )
             };

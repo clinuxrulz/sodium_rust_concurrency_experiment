@@ -65,10 +65,15 @@ fn map_c_mem() {
     let sodium_ctx = &sodium_ctx;
     {
         let cs1: CellSink<i32> = sodium_ctx.new_cell_sink(3);
+        trace!("marker1");
         let c1 = cs1.cell();
+        trace!("marker2");
         let _c2 = c1.map(|a:&i32| a + 5);
+        trace!("marker3");
         let l = _c2.listen_weak(|_:&i32| {});
+        trace!("marker4");
         l.unlisten();
+        trace!("marker5");
     }
     sodium_ctx.impl_.collect_cycles();
     let node_count = sodium_ctx.impl_.node_count();

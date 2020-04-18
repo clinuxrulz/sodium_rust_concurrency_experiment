@@ -161,10 +161,12 @@ impl GcCtx {
         }
         if s.data.ref_count_adj.get() == s.data.ref_count.get() {
             s.data.color.set(Color::White);
+            s.trace(|t| {
+                self.scan(t);
+            });
+        } else {
+            self.scan_black(s);
         }
-        s.trace(|t| {
-            self.scan(t);
-        });
     }
 
     fn reset_ref_count_adj(&self, s: &GcNode) {
@@ -195,8 +197,8 @@ impl GcCtx {
         s.data.color.set(Color::Black);
         let this = self.clone();
         s.trace(|t| {
-            trace!("scan_black: gc node {} inc ref count", t.id);
-            t.data.ref_count.set(t.data.ref_count.get() + 1);
+            //trace!("scan_black: gc node {} inc ref count", t.id);
+            //t.data.ref_count.set(t.data.ref_count.get() + 1);
             if t.data.color.get() != Color::Black {
                 this.scan_black(t);
             }
@@ -332,8 +334,8 @@ impl GcNode {
             std::mem::swap(&mut *deconstructor, &mut tmp);
         }
         tmp();
-        //let mut trace = self.data.trace.write().unwrap();
-        //*trace = Box::new(|_tracer: &mut Tracer| {});
+        let mut trace = self.data.trace.write().unwrap();
+        *trace = Box::new(|_tracer: &mut Tracer| {});
     }
 
     pub fn trace<TRACER: FnMut(&GcNode)>(&self, mut tracer: TRACER) {

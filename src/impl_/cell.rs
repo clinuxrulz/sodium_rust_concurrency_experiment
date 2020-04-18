@@ -108,6 +108,16 @@ impl<A:Send+'static> Cell<A> {
             value: init_value,
             next_value_op: None,
         }));
+        let gc_node_deconstructor;
+        {
+            let cell_data = cell_data.clone();
+            let sodium_ctx = sodium_ctx.clone();
+            gc_node_deconstructor = move || {
+                let mut l = cell_data.lock();
+                let cell_data = l.as_mut().unwrap();
+                cell_data.node = sodium_ctx.null_node();
+            };
+        }
         let gc_node_trace;
         {
             let cell_data = cell_data.clone();
@@ -120,7 +130,7 @@ impl<A:Send+'static> Cell<A> {
         }
         let c = Cell {
             data: cell_data,
-            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "Cell::hold", || {}, gc_node_trace)
+            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "Cell::hold", gc_node_deconstructor, gc_node_trace)
         };
         let sodium_ctx = sodium_ctx.clone();
         let node: Node;

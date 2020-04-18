@@ -98,8 +98,16 @@ impl Node {
                     let mut dependency_dependents = dependency.data.dependents.write().unwrap();
                     dependency_dependents.retain(|dependent| !Arc::ptr_eq(&dependent.data, &node.data));
                 }
+                for dependent in dependents {
+                    let mut dependent_dependencies = dependent.data.dependencies.write().unwrap();
+                    dependent_dependencies.retain(|dependency| !Arc::ptr_eq(&dependency.data, &node.data));
+                }
                 for gc_node in keep_alive {
                     gc_node.dec_ref();
+                }
+                {
+                    let mut node = result_forward_ref.write().unwrap();
+                    *node = None;
                 }
             };
         }

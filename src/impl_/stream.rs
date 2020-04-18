@@ -139,6 +139,8 @@ impl<A:Send+'static> Stream<A> {
         let s;
         {
             let result_forward_ref = result_forward_ref.clone();
+            let result_forward_ref2 = result_forward_ref.clone();
+            let sodium_ctx2 = sodium_ctx.clone();
             s = Stream {
                 data: Arc::new(Mutex::new(StreamData {
                     node: sodium_ctx.null_node(),
@@ -149,7 +151,15 @@ impl<A:Send+'static> Stream<A> {
                 gc_node: GcNode::new(
                     &sodium_ctx.gc_ctx(),
                     name.to_string(),
-                    || {},
+                    move || {
+                        let l = result_forward_ref2.lock();
+                        let s = l.as_ref().unwrap();
+                        let s: &Option<Arc<Mutex<StreamData<A>>>> = &s;
+                        let s: Arc<Mutex<StreamData<A>>> = s.clone().unwrap();
+                        let mut l = s.lock();
+                        let s = l.as_mut().unwrap();
+                        s.node = sodium_ctx2.null_node();
+                    },
                     move |tracer: &mut Tracer| {
                         let gc_node;
                         {

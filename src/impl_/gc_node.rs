@@ -84,7 +84,7 @@ impl GcCtx {
             self.scan_roots();
             self.collect_roots();
             trace!("end: collect_cycles");
-            let bail = self.with_data(|data: &mut GcCtxData| data.roots.is_empty());
+            let bail = self.with_data(|data: &mut GcCtxData| data.roots.is_empty() && data.to_be_freed.is_empty());
             if bail {
                 break;
             }
@@ -99,6 +99,9 @@ impl GcCtx {
                 std::mem::swap(&mut old_roots, &mut data.roots)
         );
         let mut new_roots: Vec<GcNode> = Vec::new();
+        for root in &old_roots {
+            self.reset_ref_count_adj(root);
+        }
         for root in old_roots {
             let color = root.data.color.get();
             if color == Color::Purple {
@@ -311,8 +314,9 @@ impl GcNode {
         self.data.color.set(Color::Black);
         if true { // !self.data.buffered.get() {
             //trace!("release: freeing gc_node {} ({})", self.id, self.name);
-            self.free();
+            //self.free();
             //self.gc_ctx.with_data(|data: &mut GcCtxData| data.to_be_freed.push(self.clone()));
+            self.gc_ctx.with_data(|data: &mut GcCtxData| data.to_be_freed.push(self.clone()));
         }
     }
 

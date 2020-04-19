@@ -108,6 +108,17 @@ impl<A:Send+'static> Cell<A> {
             value: init_value,
             next_value_op: None,
         }));
+        let gc_node_deconstructor;
+        {
+            let cell_data = cell_data.clone();
+            let sodium_ctx = sodium_ctx.clone();
+            gc_node_deconstructor = move || {
+                let mut l = cell_data.lock();
+                let cell_data = l.as_mut().unwrap();
+                cell_data.node = sodium_ctx.null_node();
+                cell_data.stream = Stream::new(&sodium_ctx);
+            };
+        }
         let gc_node_trace;
         {
             let cell_data = cell_data.clone();

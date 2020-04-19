@@ -39,6 +39,21 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
             stream: Stream::new(sodium_ctx),
             looped: false
         }));
+        let gc_node_destructor;
+        {
+            let stream_loop_data = Arc::downgrade(&stream_loop_data);
+            let sodium_ctx = sodium_ctx.clone();
+            gc_node_destructor = move || {
+                let stream_loop_data_op = stream_loop_data.upgrade();
+                if stream_loop_data_op.is_none() {
+                    return;
+                }
+                let stream_loop_data = stream_loop_data_op.unwrap();
+                let mut l = stream_loop_data.lock();
+                let stream_loop_data = l.as_mut().unwrap();
+                stream_loop_data.stream = Stream::new(&sodium_ctx);
+            };
+        }
         let gc_node_trace;
         {
             let stream_loop_data = stream_loop_data.clone();
@@ -50,7 +65,7 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
         }
         StreamLoop {
             data: stream_loop_data,
-            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "StreamLoop::new", || {}, gc_node_trace)
+            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "StreamLoop::new", gc_node_destructor, gc_node_trace)
         }
     }
 

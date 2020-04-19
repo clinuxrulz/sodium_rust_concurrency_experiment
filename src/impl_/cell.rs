@@ -116,6 +116,7 @@ impl<A:Send+'static> Cell<A> {
                 let mut l = cell_data.lock();
                 let cell_data = l.as_mut().unwrap();
                 cell_data.node = sodium_ctx.null_node();
+                cell_data.stream = Stream::new(&sodium_ctx);
             };
         }
         let gc_node_trace;

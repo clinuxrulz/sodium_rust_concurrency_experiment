@@ -162,6 +162,9 @@ impl GcCtx {
         if s.data.color.get() != Color::Gray {
             return;
         }
+        if s.data.ref_count_adj.get() > s.data.ref_count.get() {
+            panic!("ref count adj was larger than ref count for node {} ({})", s.id, s.name);
+        }
         if s.data.ref_count_adj.get() == s.data.ref_count.get() {
             s.data.color.set(Color::White);
             s.trace(|t| {

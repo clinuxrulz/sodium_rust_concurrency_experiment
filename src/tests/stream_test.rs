@@ -543,6 +543,7 @@ fn hold() {
 
 #[test]
 fn hold_is_delayed() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     {

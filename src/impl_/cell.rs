@@ -110,9 +110,14 @@ impl<A:Send+'static> Cell<A> {
         }));
         let gc_node_deconstructor;
         {
-            let cell_data = cell_data.clone();
+            let cell_data = Arc::downgrade(&cell_data);
             let sodium_ctx = sodium_ctx.clone();
             gc_node_deconstructor = move || {
+                let cell_data_op = cell_data.upgrade();
+                if cell_data_op.is_none() {
+                    return;
+                }
+                let cell_data = cell_data_op.unwrap();
                 let mut l = cell_data.lock();
                 let cell_data = l.as_mut().unwrap();
                 cell_data.node = sodium_ctx.null_node();
@@ -121,8 +126,13 @@ impl<A:Send+'static> Cell<A> {
         }
         let gc_node_trace;
         {
-            let cell_data = cell_data.clone();
+            let cell_data = Arc::downgrade(&cell_data);
             gc_node_trace = move |tracer: &mut Tracer| {
+                let cell_data_op = cell_data.upgrade();
+                if cell_data_op.is_none() {
+                    return;
+                }
+                let cell_data = cell_data_op.unwrap();
                 let l = cell_data.lock();
                 let cell_data = l.as_ref().unwrap();
                 tracer(&cell_data.node.gc_node);

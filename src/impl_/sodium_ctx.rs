@@ -17,7 +17,6 @@ pub struct SodiumCtx {
 }
 
 pub struct SodiumCtxData {
-    pub null_node_op: Option<Node>,
     pub changed_nodes: Vec<Node>,
     pub visited_nodes: Vec<Node>,
     pub transaction_depth: u32,
@@ -109,7 +108,6 @@ impl SodiumCtx {
             data:
                 Arc::new(Mutex::new(
                     SodiumCtxData {
-                        null_node_op: None,
                         changed_nodes: Vec::new(),
                         visited_nodes: Vec::new(),
                         transaction_depth: 0,
@@ -132,18 +130,7 @@ impl SodiumCtx {
     }
 
     pub fn null_node(&self) -> Node {
-        self.with_data(|data: &mut SodiumCtxData| {
-            if let Some(ref null_node) = data.null_node_op {
-                return null_node.clone();
-            }
-            let null_node = Node::new(self, "null_node", || {}, Vec::new());
-            // Do not include null_node against total node count
-            self.dec_node_ref_count();
-            self.dec_node_count();
-            //
-            data.null_node_op = Some(null_node.clone());
-            return null_node;
-        })
+        Node::new(self, "null_node", || {}, Vec::new())
     }
 
     pub fn transaction<R,K:FnOnce()->R>(&self, k:K) -> R {

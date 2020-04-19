@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
@@ -98,6 +99,7 @@ impl GcCtx {
             |data: &mut GcCtxData|
                 std::mem::swap(&mut old_roots, &mut data.roots)
         );
+        self.display_graph(&old_roots);
         let mut new_roots: Vec<GcNode> = Vec::new();
         for root in &old_roots {
             self.reset_ref_count_adj(root);
@@ -123,6 +125,43 @@ impl GcCtx {
                 std::mem::swap(&mut new_roots, &mut data.roots)
         );
         trace!("end: mark_roots");
+    }
+
+    fn display_graph(&self, roots: &Vec<GcNode>) {
+        let mut stack = Vec::new();
+        let mut visited: HashSet<*const GcNodeData> = HashSet::new();
+        for root in roots {
+            stack.push(root.clone());
+        }
+        trace!("-- start of graph drawing --");
+        loop {
+            let next_op = stack.pop();
+            if next_op.is_none() {
+                break;
+            }
+            let next = next_op.unwrap();
+            {
+                let next_ptr: &GcNodeData = &next.data;
+                let next_ptr: *const GcNodeData = next_ptr;
+                if visited.contains(&next_ptr) {
+                    continue;
+                }
+                visited.insert(next_ptr);
+            }
+            let mut line: String = format!("id {}, ref_count {}: ", next.id, next.data.ref_count.get());
+            let mut first: bool = true;
+            next.trace(|t| {
+                if first {
+                    first = false;
+                } else {
+                    line.push(',');
+                }
+                line.push_str(&format!("{}", t.id));
+                stack.push(t.clone());
+            });
+            trace!("{}", line);
+        }
+        trace!("-- end of graph drawing --");
     }
 
     fn mark_gray(&self, s: &GcNode) {

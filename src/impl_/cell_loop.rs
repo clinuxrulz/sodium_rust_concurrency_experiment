@@ -58,13 +58,34 @@ impl<A:Send+Clone+'static> CellLoop<A> {
         let cell_loop_data =
             Arc::new(Mutex::new(CellLoopData {
                 stream_loop: stream_loop,
-                cell: stream.hold_lazy(init_value),
+                cell: stream.hold_lazy(init_value.clone()),
                 init_value_op
             }));
+        let gc_node_deconstructor;
+        {
+            let cell_loop_data = Arc::downgrade(&cell_loop_data);
+            let sodium_ctx = sodium_ctx.clone();
+            gc_node_deconstructor = move || {
+                let cell_loop_data_op = cell_loop_data.upgrade();
+                if cell_loop_data_op.is_none() {
+                    return;
+                }
+                let cell_loop_data = cell_loop_data_op.unwrap();
+                let mut l = cell_loop_data.lock();
+                let cell_loop_data = l.as_mut().unwrap();
+                cell_loop_data.stream_loop = StreamLoop::new(&sodium_ctx);
+                cell_loop_data.cell = Cell::new(&sodium_ctx, init_value.run());
+            };
+        }
         let gc_node_trace;
         {
-            let cell_loop_data = cell_loop_data.clone();
+            let cell_loop_data = Arc::downgrade(&cell_loop_data);
             gc_node_trace = move |tracer: &mut Tracer| {
+                let cell_loop_data_op = cell_loop_data.upgrade();
+                if cell_loop_data_op.is_none() {
+                    return;
+                }
+                let cell_loop_data = cell_loop_data_op.unwrap();
                 let l = cell_loop_data.lock();
                 let cell_loop_data = l.as_ref().unwrap();
                 tracer(&cell_loop_data.stream_loop.gc_node);
@@ -73,7 +94,7 @@ impl<A:Send+Clone+'static> CellLoop<A> {
         }
         CellLoop {
             data: cell_loop_data,
-            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "CellLoop::new", || {}, gc_node_trace)
+            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "CellLoop::new", gc_node_deconstructor, gc_node_trace)
         }
     }
 

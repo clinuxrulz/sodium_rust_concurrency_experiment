@@ -174,7 +174,7 @@ impl GcCtx {
             trace!("mark_gray: gc node {} dec ref count", t.id);
             t.data.ref_count_adj.set(t.data.ref_count_adj.get() + 1);
             if t.data.ref_count_adj.get() > t.data.ref_count.get() {
-                panic!("ref count adj was larger than ref count for node {} ({})", t.id, t.name);
+                panic!("ref count adj was larger than ref count for node {} ({}) (ref adj {}) (ref cnt {})", t.id, t.name, t.data.ref_count_adj.get(), t.data.ref_count.get());
             }
             self.mark_gray(t);
         });

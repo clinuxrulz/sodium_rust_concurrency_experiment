@@ -414,6 +414,7 @@ fn collect() {
 
 #[test]
 fn accum() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     let l;

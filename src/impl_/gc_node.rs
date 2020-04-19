@@ -130,6 +130,7 @@ impl GcCtx {
     fn display_graph(&self, roots: &Vec<GcNode>) {
         let mut stack = Vec::new();
         let mut visited: HashSet<*const GcNodeData> = HashSet::new();
+        let mut show_names_for = Vec::new();
         for root in roots {
             stack.push(root.clone());
         }
@@ -148,6 +149,7 @@ impl GcCtx {
                 }
                 visited.insert(next_ptr);
             }
+            show_names_for.push(next.clone());
             let mut line: String = format!("id {}, ref_count {}: ", next.id, next.data.ref_count.get());
             let mut first: bool = true;
             next.trace(|t| {
@@ -160,6 +162,10 @@ impl GcCtx {
                 stack.push(t.clone());
             });
             trace!("{}", line);
+        }
+        trace!("node names:");
+        for next in show_names_for {
+            trace!("{}: {}", next.id, next.name);
         }
         trace!("-- end of graph drawing --");
     }
@@ -350,10 +356,8 @@ impl GcNode {
     pub fn release(&self) {
         self.data.color.set(Color::Black);
         if !self.data.buffered.get() {
-            //trace!("release: freeing gc_node {} ({})", self.id, self.name);
+            trace!("release: freeing gc_node {} ({})", self.id, self.name);
             self.free();
-            //self.gc_ctx.with_data(|data: &mut GcCtxData| data.to_be_freed.push(self.clone()));
-            //self.gc_ctx.with_data(|data: &mut GcCtxData| data.to_be_freed.push(self.clone()));
         }
     }
 

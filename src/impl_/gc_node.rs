@@ -134,6 +134,9 @@ impl GcCtx {
         s.trace(&mut |t: &GcNode| {
             trace!("mark_gray: gc node {} dec ref count", t.id);
             t.data.ref_count_adj.set(t.data.ref_count_adj.get() + 1);
+            if t.data.ref_count_adj.get() > t.data.ref_count.get() {
+                panic!("ref count adj was larger than ref count for node {} ({})", t.id, t.name);
+            }
             self.mark_gray(t);
         });
     }
@@ -161,9 +164,6 @@ impl GcCtx {
     fn scan(&self, s: &GcNode) {
         if s.data.color.get() != Color::Gray {
             return;
-        }
-        if s.data.ref_count_adj.get() > s.data.ref_count.get() {
-            panic!("ref count adj was larger than ref count for node {} ({})", s.id, s.name);
         }
         if s.data.ref_count_adj.get() == s.data.ref_count.get() {
             s.data.color.set(Color::White);

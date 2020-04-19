@@ -84,14 +84,13 @@ impl<A:Send+'static> Stream<A> {
             sodium_ctx,
             "Stream::new",
             |_s: &Stream<A>| {
-                let s = _s.clone();
                 let node = Node::new(
                     sodium_ctx,
                     "Stream::new node",
-                    move || { s.nop() },
+                    || {},
                     Vec::new()
                 );
-                node.add_update_dependencies(vec![_s.gc_node.clone()]);
+                node.add_keep_alive(&_s.gc_node);
                 node
             }
         )

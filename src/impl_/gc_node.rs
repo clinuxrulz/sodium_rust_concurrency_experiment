@@ -206,6 +206,7 @@ impl GcCtx {
         }
         if s.data.ref_count_adj.get() == s.data.ref_count.get() {
             s.data.color.set(Color::White);
+            trace!("scan: gc node {} became white", s.id);
             s.trace(|t| {
                 self.scan(t);
             });
@@ -278,6 +279,7 @@ impl GcCtx {
             s.trace(|t| {
                 self.collect_white(t, white);
             });
+            trace!("collect_white: gc node {} added to white list", s.id);
             white.push(s.clone());
         }
     }

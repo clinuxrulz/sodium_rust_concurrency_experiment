@@ -274,7 +274,7 @@ impl GcCtx {
     }
 
     fn collect_white(&self, s: &GcNode, white: &mut Vec<GcNode>) {
-        if s.data.color.get() == Color::White && !s.data.buffered.get() {
+        if s.data.color.get() == Color::White /*&& !s.data.buffered.get()*/ {
             s.data.color.set(Color::Black);
             s.trace(|t| {
                 self.collect_white(t, white);
@@ -349,11 +349,11 @@ impl GcNode {
 
     pub fn release(&self) {
         self.data.color.set(Color::Black);
-        if true { // !self.data.buffered.get() {
+        if !self.data.buffered.get() {
             //trace!("release: freeing gc_node {} ({})", self.id, self.name);
-            //self.free();
+            self.free();
             //self.gc_ctx.with_data(|data: &mut GcCtxData| data.to_be_freed.push(self.clone()));
-            self.gc_ctx.with_data(|data: &mut GcCtxData| data.to_be_freed.push(self.clone()));
+            //self.gc_ctx.with_data(|data: &mut GcCtxData| data.to_be_freed.push(self.clone()));
         }
     }
 

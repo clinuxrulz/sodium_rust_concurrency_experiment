@@ -187,24 +187,10 @@ impl GcCtx {
         s.data.visited.set(false);
     }
 
-    fn reset_to_black(&self, s: &GcNode) {
-        if s.data.visited.get() {
-            return;
-        }
-        s.data.visited.set(true);
-        s.data.color.set(Color::Black);
-        s.trace(|t| {
-            self.reset_to_black(t);
-        });
-        s.data.visited.set(false);
-    }
-
     fn scan_black(&self, s: &GcNode) {
         s.data.color.set(Color::Black);
         let this = self.clone();
         s.trace(|t| {
-            //trace!("scan_black: gc node {} inc ref count", t.id);
-            //t.data.ref_count.set(t.data.ref_count.get() + 1);
             if t.data.color.get() != Color::Black {
                 this.scan_black(t);
             }
@@ -218,9 +204,6 @@ impl GcCtx {
         for root in &roots {
             root.data.buffered.set(false);
             self.collect_white(root, &mut white);
-        }
-        for root in roots {
-            self.reset_to_black(&root);
         }
         for i in &white {
             if !i.data.freed.get() {

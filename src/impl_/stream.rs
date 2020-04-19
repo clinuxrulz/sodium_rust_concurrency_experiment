@@ -84,12 +84,15 @@ impl<A:Send+'static> Stream<A> {
             sodium_ctx,
             "Stream::new",
             |_s: &Stream<A>| {
-                Node::new(
+                let s = _s.clone();
+                let node = Node::new(
                     sodium_ctx,
                     "Stream::new node",
-                    || {},
+                    move || { s.nop() },
                     Vec::new()
-                )
+                );
+                node.add_update_dependencies(vec![_s.gc_node.clone()]);
+                node
             }
         )
     }
@@ -177,7 +180,6 @@ impl<A:Send+'static> Stream<A> {
             };
         }
         let node = mk_node(&s);
-        node.add_keep_alive(&s.gc_node);
         s.with_data(|data: &mut StreamData<A>| data.node = node.clone());
         {
             let mut l = result_forward_ref.lock();
@@ -401,12 +403,11 @@ impl<A:Send+'static> Stream<A> {
                 let s_ = s.clone();
                 let sodium_ctx = sodium_ctx.clone();
                 let sodium_ctx2 = sodium_ctx.clone();
-                let _self = Stream::downgrade(self);
+                let _self = self.clone();
                 let node = Node::new(
                     &sodium_ctx2,
                     "Stream::once node",
                     move || {
-                        let _self = _self.upgrade().unwrap();
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
                                 s_._send(firing.clone());
@@ -426,7 +427,7 @@ impl<A:Send+'static> Stream<A> {
                     },
                     vec![self.node()]
                 );
-                node.add_update_dependencies(vec![s.gc_node.clone()]);
+                node.add_update_dependencies(vec![self.gc_node.clone(), s.gc_node.clone()]);
                 node
             }
         )

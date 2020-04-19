@@ -219,7 +219,7 @@ impl GcCtx {
         for root in roots {
             self.reset_to_black(&root);
         }
-        for i in white {
+        for i in &white {
             if !i.data.freed.get() {
                 trace!("collect_roots: freeing white node {} ({})", i.id, i.name);
                 i.free();
@@ -228,11 +228,21 @@ impl GcCtx {
         }
         let mut to_be_freed = Vec::new();
         self.with_data(|data: &mut GcCtxData| to_be_freed.append(&mut data.to_be_freed));
-        for i in to_be_freed {
+        for i in &to_be_freed {
             if !i.data.freed.get() {
                 trace!("collect_roots: freeing to_be_freed node {} ({})", i.id, i.name);
                 i.free();
                 self.with_data(|data: &mut GcCtxData| data.roots.retain(|root: &GcNode| root.id != i.id));
+            }
+        }
+        for i in white {
+            if i.ref_count() != 0 {
+                panic!("freed node ref count did not drop to zero for node {} ({})", i.id, i.name);
+            }
+        }
+        for i in to_be_freed {
+            if i.ref_count() != 0 {
+                panic!("freed node ref count did not drop to zero for node {} ({})", i.id, i.name);
             }
         }
     }

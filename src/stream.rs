@@ -5,7 +5,7 @@ use crate::impl_::node::Node;
 use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 use crate::impl_::lambda::IsLambda3;
-use crate::impl_::lambda::lambda2;
+use crate::impl_::lambda::{lambda1, lambda2};
 use crate::Lazy;
 use crate::listener::Listener;
 use crate::sodium_ctx::SodiumCtx;
@@ -89,7 +89,8 @@ impl<A:Clone+Send+'static> Stream<A> {
 
     pub fn gate(&self, cpred: &Cell<bool>) -> Stream<A> {
         let cpred = cpred.clone();
-        self.filter(move |_: &A| cpred.sample())
+        let cpred_dep = cpred.impl_.gc_node.clone();
+        self.filter(lambda1(move |_: &A| cpred.sample(), vec![cpred_dep]))
     }
 
     pub fn once(&self) -> Stream<A> {

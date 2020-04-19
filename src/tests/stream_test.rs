@@ -346,6 +346,7 @@ fn loop_() {
 
 #[test]
 fn gate() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     {

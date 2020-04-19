@@ -291,7 +291,7 @@ impl GcNode {
     }
 
     pub fn inc_ref_if_alive(&self) -> bool {
-        if self.ref_count() != 0 {
+        if self.ref_count() != 0 && !self.data.freed.get() {
             self.data.ref_count.set(self.data.ref_count.get() + 1);
             self.data.color.set(Color::Black);
             true

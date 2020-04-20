@@ -273,43 +273,38 @@ impl<A:Send+'static> Stream<A> {
     }
 
     pub fn merge<FN:IsLambda2<A,A,A>+Send+Sync+'static>(&self, s2: &Stream<A>, mut f: FN) -> Stream<A> where A: Clone {
-        let _self = self.clone();
+        let self_ = self.clone();
         let s2 = s2.clone();
+        let s2_gc_node = s2.gc_node().clone();
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
-            "Stream::merge",
-            |s: &Stream<A>| {
-                let s_ = s.clone();
-                let s2_ = s2.clone();
-                let self_ = self.clone();
-                let self_gc_node = self.gc_node.clone();
-                let s2_gc_node = s2.gc_node.clone();
+            |s: StreamWeakForwardRef<A>| {
                 let f_deps = lambda2_deps(&f);
                 let node = Node::new(
                     &sodium_ctx,
-                    "Stream::merge node",
+                    "Stream::merge",
                     move || {
                         self_.with_firing_op(|firing1_op: &mut Option<A>| {
-                            s2_.with_firing_op(|firing2_op: &mut Option<A>| {
+                            s2.with_firing_op(|firing2_op: &mut Option<A>| {
                                 if let Some(ref firing1) = firing1_op {
                                     if let Some(ref firing2) = firing2_op {
-                                        s_._send(f.call(firing1, firing2));
+                                        s.unwrap()._send(f.call(firing1, firing2));
                                     } else {
-                                        s_._send(firing1.clone());
+                                        s.unwrap()._send(firing1.clone());
                                     }
                                 } else {
                                     if let Some(ref firing2) = firing2_op {
-                                        s_._send(firing2.clone());
+                                        s.unwrap()._send(firing2.clone());
                                     }
                                 }
                             })
                         })
                     },
-                    vec![self.node(), s2.node()]
+                    vec![self.box_clone(), s2.box_clone()]
                 );
-                node.add_update_dependencies(f_deps);
-                node.add_update_dependencies(vec![self_gc_node, s2_gc_node, s.gc_node.clone()]);
+                IsNode::add_update_dependencies(&node, f_deps);
+                IsNode::add_update_dependencies(&node, vec![self.gc_node().clone(), s2_gc_node]);
                 node
             }
         )

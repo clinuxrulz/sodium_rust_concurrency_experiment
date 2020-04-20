@@ -1,6 +1,6 @@
 use crate::impl_::gc_node::GcCtx;
 use crate::impl_::listener::Listener;
-use crate::impl_::node::{Node, NodeData, WeakNode};
+use crate::impl_::node::{Node, IsNode, IsWeakNode, box_clone_vec_is_node, box_clone_vec_is_weak_node};
 
 use std::mem;
 use std::sync::Arc;
@@ -17,8 +17,8 @@ pub struct SodiumCtx {
 }
 
 pub struct SodiumCtxData {
-    pub changed_nodes: Vec<Node>,
-    pub visited_nodes: Vec<Node>,
+    pub changed_nodes: Vec<Box<dyn IsNode>>,
+    pub visited_nodes: Vec<Box<dyn IsNode>>,
     pub transaction_depth: u32,
     pub pre_post: Vec<Box<dyn FnMut()+Send>>,
     pub post: Vec<Box<dyn FnMut()+Send>>,
@@ -149,13 +149,13 @@ impl SodiumCtx {
         return result;
     }
 
-    pub fn add_dependents_to_changed_nodes(&self, node: Node) {
+    pub fn add_dependents_to_changed_nodes(&self, node: &dyn IsNode) {
         self.with_data(|data: &mut SodiumCtxData| {
-            let node_dependents = node.data.dependents.read().unwrap();
+            let node_dependents = node.data().dependents.read().unwrap();
             node_dependents
                 .iter()
-                .flat_map(|node: &WeakNode| node.upgrade())
-                .for_each(|node: Node| {
+                .flat_map(|node: &Box<dyn IsWeakNode+Send+Sync+'static>| node.upgrade())
+                .for_each(|node: Box<dyn IsNode+Send+Sync>| {
                     data.changed_nodes.push(node);
                 });
         });
@@ -221,9 +221,9 @@ impl SodiumCtx {
             data.allow_collect_cycles_counter = data.allow_collect_cycles_counter + 1;
         });
         loop {
-            let changed_nodes: Vec<Node> =
+            let changed_nodes: Vec<Box<dyn IsNode>> =
                 self.with_data(|data: &mut SodiumCtxData| {
-                    let mut changed_nodes: Vec<Node> = Vec::new();
+                    let mut changed_nodes: Vec<Box<dyn IsNode>> = Vec::new();
                     mem::swap(&mut changed_nodes, &mut data.changed_nodes);
                     return changed_nodes;
                 });
@@ -231,7 +231,7 @@ impl SodiumCtx {
                 break;
             }
             for node in changed_nodes {
-                self.update_node(&node);
+                self.update_node(node.node());
             }
         }
         self.with_data(|data: &mut SodiumCtxData| {
@@ -278,10 +278,10 @@ impl SodiumCtx {
         if bail {
             return;
         }
-        let dependencies: Vec<Node>;
+        let dependencies: Vec<Box<dyn IsNode+Send+Sync+'static>>;
         {
             let dependencies2 = node.data.dependencies.read().unwrap();
-            dependencies = dependencies2.clone();
+            dependencies = box_clone_vec_is_node(&*dependencies2);
         }
         {
             let node = node.clone();
@@ -293,13 +293,13 @@ impl SodiumCtx {
         // visit dependencies
         let handle;
         {
-            let dependencies = dependencies.clone();
+            let dependencies = box_clone_vec_is_node(&dependencies);
             let _self = self.clone();
             handle = self.threaded_mode.spawn(move || {
                 for dependency in &dependencies {
-                    let visit_it = !*dependency.data.visited.read().unwrap();
+                    let visit_it = !*dependency.data().visited.read().unwrap();
                     if visit_it {
-                        _self.update_node(dependency);
+                        _self.update_node(dependency.node());
                     }
                 }
             });
@@ -309,7 +309,7 @@ impl SodiumCtx {
         let any_changed =
             dependencies
                 .iter()
-                .any(|node: &Node| { *node.data.changed.read().unwrap() });
+                .any(|node: &Box<dyn IsNode+Send+Sync+'static>| { *node.node().data().changed.read().unwrap() });
         // if dependencies changed, then execute update on current node
         if any_changed {
             let mut update = node.data.update.write().unwrap();
@@ -318,13 +318,12 @@ impl SodiumCtx {
         }
         // if self changed then update dependents
         if *node.data.changed.read().unwrap() {
-            let dependents = node.data.dependents.read().unwrap().clone();
+            let dependents = box_clone_vec_is_weak_node(&*node.data().dependents.read().unwrap());
             {
-                let dependents = dependents.clone();
                 let _self = self.clone();
                 for dependent in dependents {
                     if let Some(dependent2) = dependent.upgrade() {
-                        _self.update_node(&dependent2);
+                        _self.update_node(dependent2.node());
                     }
                 }
             }

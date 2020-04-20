@@ -120,7 +120,6 @@ impl<A:Send+'static> Cell<A> {
                 }
             });
         let cell_data = Arc::new(Mutex::new(CellData {
-            node: sodium_ctx.null_node(),
             stream: stream.clone(),
             value: init_value,
             next_value_op: None,
@@ -137,7 +136,6 @@ impl<A:Send+'static> Cell<A> {
                 let cell_data = cell_data_op.unwrap();
                 let mut l = cell_data.lock();
                 let cell_data = l.as_mut().unwrap();
-                cell_data.node = sodium_ctx.null_node();
                 cell_data.stream = Stream::new(&sodium_ctx);
             };
         }
@@ -152,26 +150,22 @@ impl<A:Send+'static> Cell<A> {
                 let cell_data = cell_data_op.unwrap();
                 let l = cell_data.lock();
                 let cell_data = l.as_ref().unwrap();
-                tracer(&cell_data.node.gc_node);
-                tracer(&cell_data.stream.gc_node);
+                tracer(cell_data.stream.gc_node());
             };
         }
-        let c = Cell {
-            data: cell_data,
-            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "Cell::hold", gc_node_deconstructor, gc_node_trace)
-        };
         let sodium_ctx = sodium_ctx.clone();
         let node: Node;
+        let c_forward_ref = CellWeakForwardRef::new();
         {
-            let c = c.clone();
-            let c_gc_node = c.gc_node.clone();
+            let c = c_forward_ref.clone();
             let stream_node = stream.node();
-            let stream_gc_node = stream.gc_node.clone();
+            let stream_gc_node = stream.gc_node().clone();
             let sodium_ctx2 = sodium_ctx.clone();
             node = Node::new(
                 &sodium_ctx2,
-                "Cell::hold inner node",
+                "Cell::hold",
                 move || {
+                    let c = c.unwrap();
                     let firing_op = stream.with_firing_op(|firing_op| firing_op.clone());
                     if let Some(firing) = firing_op {
                         let is_first =
@@ -194,11 +188,15 @@ impl<A:Send+'static> Cell<A> {
                         }
                     }
                 },
-                vec![stream_node]
+                vec![stream.box_clone()]
             );
-            node.add_update_dependencies(vec![stream_gc_node, c_gc_node]);
+            IsNode::add_update_dependencies(&node, vec![stream_gc_node]);
         }
-        c.with_data(|data: &mut CellData<A>| data.node = node);
+        let c = Cell {
+            data: cell_data,
+            node: node
+        };
+        c_forward_ref.assign(&c);
         c
     }
 

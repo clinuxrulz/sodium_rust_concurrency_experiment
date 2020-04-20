@@ -8,6 +8,82 @@ use std::collections::HashSet;
 use crate::impl_::gc_node::{GcNode, Tracer};
 use crate::impl_::sodium_ctx::SodiumCtx;
 
+pub trait IsNode {
+    fn node(&self) -> &Node;
+
+    fn box_clone(&self) -> Box<dyn IsNode>;
+
+    fn downgrade(&self) -> Box<dyn IsWeakNode>;
+
+    fn gc_node(&self) -> &GcNode {
+        &self.node().gc_node
+    }
+
+    fn data(&self) -> &Arc<NodeData> {
+        &self.node().data
+    }
+}
+
+pub trait IsWeakNode {
+    fn weak_node(&self) -> &WeakNode;
+
+    fn box_clone(&self) -> Box<dyn IsWeakNode>;
+
+    fn upgrade(&self) -> Option<Box<dyn IsNode>>;
+
+    fn gc_node(&self) -> &GcNode {
+        &self.weak_node().gc_node
+    }
+
+    fn data(&self) -> &Weak<NodeData> {
+        &self.weak_node().data
+    }
+}
+
+pub fn box_clone_vec_is_node(xs: &Vec<Box<dyn IsNode>>) -> Vec<Box<dyn IsNode>> {
+    let result = Vec::with_capacity(xs.len());
+    for x in xs {
+        result.push(x.box_clone());
+    }
+    result
+}
+
+pub fn box_clone_vec_is_weak_node(xs: &Vec<Box<dyn IsWeakNode>>) -> Vec<Box<dyn IsWeakNode>> {
+    let result = Vec::with_capacity(xs.len());
+    for x in xs {
+        result.push(x.box_clone());
+    }
+    result
+}
+
+impl IsNode for Node {
+    fn node(&self) -> &Node {
+        self
+    }
+
+    fn box_clone(&self) -> Box<dyn IsNode> {
+        Box::new(self.clone())
+    }
+
+    fn downgrade(&self) -> Box<dyn IsWeakNode> {
+        Box::new(Node::downgrade(self))
+    }
+}
+
+impl IsWeakNode for WeakNode {
+    fn weak_node(&self) -> &WeakNode {
+        self
+    }
+
+    fn box_clone(&self) -> Box<dyn IsWeakNode> {
+        Box::new(self.clone())
+    }
+
+    fn upgrade(&self) -> Option<Box<dyn IsNode>> {
+        self.upgrade().map(|x| Box::new(x) as Box<dyn IsNode>)
+    }
+}
+
 pub struct Node {
     pub data: Arc<NodeData>,
     pub gc_node: GcNode,
@@ -19,8 +95,8 @@ pub struct NodeData {
     pub changed: RwLock<bool>,
     pub update: RwLock<Box<dyn FnMut()+Send+Sync>>,
     pub update_dependencies: RwLock<Vec<GcNode>>,
-    pub dependencies: RwLock<Vec<Node>>,
-    pub dependents: RwLock<Vec<WeakNode>>,
+    pub dependencies: RwLock<Vec<Box<dyn IsNode>>>,
+    pub dependents: RwLock<Vec<Box<dyn IsWeakNode>>>,
     pub keep_alive: RwLock<Vec<GcNode>>,
     pub sodium_ctx: SodiumCtx
 }
@@ -58,7 +134,7 @@ impl Drop for NodeData {
 }
 
 impl Node {
-    pub fn new<NAME:ToString,UPDATE:FnMut()+Send+Sync+'static>(sodium_ctx: &SodiumCtx, name:NAME, update: UPDATE, dependencies: Vec<Node>) -> Self {
+    pub fn new<NAME:ToString,UPDATE:FnMut()+Send+Sync+'static>(sodium_ctx: &SodiumCtx, name:NAME, update: UPDATE, dependencies: Vec<Box<dyn IsNode>>) -> Self {
         let result_forward_ref: Arc<RwLock<Option<Weak<NodeData>>>> = Arc::new(RwLock::new(None));
         let deconstructor;
         let trace;
@@ -100,10 +176,10 @@ impl Node {
                     *update = Box::new(|| {});
                 }
                 for dependency in dependencies {
-                    let mut dependency_dependents = dependency.data.dependents.write().unwrap();
+                    let mut dependency_dependents = dependency.data().dependents.write().unwrap();
                     dependency_dependents.retain(
                         |dependent|
-                            if let Some(dependent_data) = dependent.data.upgrade() {
+                            if let Some(dependent_data) = dependent.data().upgrade() {
                                 !Arc::ptr_eq(&dependent_data, &node_data)
                             } else {
                                 false
@@ -111,9 +187,9 @@ impl Node {
                     );
                 }
                 for dependent in dependents {
-                    if let Some(dependent_data) = dependent.data.upgrade() {
+                    if let Some(dependent_data) = dependent.data().upgrade() {
                         let mut dependent_dependencies = dependent_data.dependencies.write().unwrap();
-                        dependent_dependencies.retain(|dependency| !Arc::ptr_eq(&dependency.data, &node_data));
+                        dependent_dependencies.retain(|dependency| !Arc::ptr_eq(dependency.data(), &node_data));
                     }
                 }
                 for gc_node in keep_alive {
@@ -139,7 +215,7 @@ impl Node {
                     {
                         let dependencies = node_data.dependencies.read().unwrap();
                         for dependency in &*dependencies {
-                            tracer(&dependency.gc_node);
+                            tracer(dependency.gc_node());
                         }
                     }
                     {
@@ -165,7 +241,7 @@ impl Node {
                         changed: RwLock::new(false),
                         update: RwLock::new(Box::new(update)),
                         update_dependencies: RwLock::new(Vec::new()),
-                        dependencies: RwLock::new(dependencies.clone()),
+                        dependencies: RwLock::new(box_clone_vec_is_node(&dependencies)),
                         dependents: RwLock::new(Vec::new()),
                         keep_alive: RwLock::new(Vec::new()),
                         sodium_ctx: sodium_ctx.clone()
@@ -183,8 +259,8 @@ impl Node {
             *result_forward_ref = Some(Arc::downgrade(&result.data));
         }
         for dependency in dependencies {
-            let mut dependency_dependents = dependency.data.dependents.write().unwrap();
-            dependency_dependents.push(Node::downgrade(&result));
+            let mut dependency_dependents = dependency.data().dependents.write().unwrap();
+            dependency_dependents.push(result.downgrade());
         }
         sodium_ctx.inc_node_ref_count();
         sodium_ctx.inc_node_count();

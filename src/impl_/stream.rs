@@ -235,36 +235,34 @@ impl<A:Send+'static> Stream<A> {
                     vec![self.box_clone()]
                 );
                 IsNode::add_update_dependencies(&node, f_deps);
+                IsNode::add_update_dependencies(&node, vec![self.gc_node().clone()]);
                 node
             }
         )
     }
 
     pub fn filter<PRED:IsLambda1<A,bool>+Send+Sync+'static>(&self, mut pred: PRED) -> Stream<A> where A: Clone {
+        let self_ = self.clone();
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
-            "Stream::filter",
-            |s: &Stream<A>| {
-                let self_ = self.clone();
-                let self_gc_node = self.gc_node.clone();
-                let _s = s.clone();
+            |s: StreamWeakForwardRef<A>| {
                 let pred_deps = lambda1_deps(&pred);
                 let node = Node::new(
                     &sodium_ctx,
-                    "Stream::filter node",
+                    "Stream::filter",
                     move || {
                         self_.with_firing_op(|firing_op: &mut Option<A>| {
                             let firing_op2 = firing_op.clone().filter(|firing| pred.call(firing));
                             if let Some(firing) = firing_op2 {
-                                _s._send(firing);
+                                s.unwrap()._send(firing);
                             }
                         });
                     },
-                    vec![self.node()]
+                    vec![self.box_clone()]
                 );
-                node.add_update_dependencies(pred_deps);
-                node.add_update_dependencies(vec![self_gc_node, s.gc_node.clone()]);
+                IsNode::add_update_dependencies(&node, pred_deps);
+                IsNode::add_update_dependencies(&node, vec![self.gc_node().clone()]);
                 node
             }
         )

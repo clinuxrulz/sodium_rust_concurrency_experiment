@@ -1,7 +1,7 @@
 use crate::impl_::gc_node::{GcNode, Tracer};
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
-use crate::impl_::node::{Node, NodeData};
+use crate::impl_::node::{Node, WeakNode, IsNode, IsWeakNode, box_clone_vec_is_node};
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
 use crate::impl_::stream::Stream;
@@ -17,36 +17,41 @@ use crate::impl_::lambda::{lambda1, lambda2, lambda3, lambda2_deps, lambda3_deps
 use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::RwLock;
 use std::sync::Weak;
 
-pub struct Cell<A> {
-    pub data: Arc<Mutex<CellData<A>>>,
-    pub gc_node: GcNode
+pub struct CellWeakForwardRef<A> {
+    data: Arc<RwLock<Option<Cell<A>>>>
 }
 
-pub struct WeakCell<A> {
-    pub data: Weak<Mutex<CellData<A>>>,
-    pub gc_node: GcNode
-}
-
-impl<A> Clone for Cell<A> {
+impl<A> Clone for CellWeakForwardRef<A> {
     fn clone(&self) -> Self {
-        self.gc_node.inc_ref();
-        Cell {
-            data: self.data.clone(),
-            gc_node: self.gc_node.clone()
+        CellWeakForwardRef {
+            data: self.data.clone()
         }
     }
 }
 
-impl<A> Drop for Cell<A> {
-    fn drop(&mut self) {
-        self.gc_node.dec_ref();
+pub struct Cell<A> {
+    pub data: Arc<Mutex<CellData<A>>>,
+    pub node: Node
+}
+
+pub struct WeakCell<A> {
+    pub data: Weak<Mutex<CellData<A>>>,
+    pub node: WeakNode
+}
+
+impl<A> Clone for Cell<A> {
+    fn clone(&self) -> Self {
+        Cell {
+            data: self.data.clone(),
+            node: self.node.clone()
+        }
     }
 }
 
 pub struct CellData<A> {
-    node: Node,
     stream: Stream<A>,
     value: Lazy<A>,
     next_value_op: Option<A>
@@ -63,32 +68,26 @@ impl<A> Cell<A> {
         self.with_data(|data: &mut CellData<A>| data.stream.sodium_ctx())
     }
 
-    pub fn node(&self) -> Node {
-        self.with_data(|data: &mut CellData<A>| data.node.clone())
+    pub fn node(&self) -> &Node {
+        &self.node
     }
 }
 
 impl<A:Send+'static> Cell<A> {
     pub fn new(sodium_ctx: &SodiumCtx, value: A) -> Cell<A> where A: Clone {
         let cell_data = Arc::new(Mutex::new(CellData {
-            node: sodium_ctx.null_node(),
             stream: Stream::new(sodium_ctx),
             value: Lazy::of_value(value),
             next_value_op: None,
         }));
-        let gc_node_trace;
-        {
-            let cell_data = cell_data.clone();
-            gc_node_trace = move |tracer: &mut Tracer| {
-                let l = cell_data.lock();
-                let cell_data = l.as_ref().unwrap();
-                tracer(&cell_data.node.gc_node);
-                tracer(&cell_data.stream.gc_node);
-            };
-        }
         Cell {
             data: cell_data,
-            gc_node: GcNode::new(&sodium_ctx.gc_ctx(), "Cell::new", || {}, gc_node_trace)
+            node: Node::new(
+                sodium_ctx,
+                "Cell::new",
+                || {},
+                vec![]
+            )
         }
     }
 

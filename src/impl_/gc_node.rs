@@ -109,9 +109,8 @@ impl GcCtx {
             if color == Color::Purple {
                 self.mark_gray(&root);
                 new_roots.push(root);
-            } else if color != Color::Gray {
+            } else {
                 root.data.buffered.set(false);
-                root.data.color.set(Color::Black);
                 if root.data.color.get() == Color::Black && root.data.ref_count.get() == 0 && !root.data.freed.get() {
                     self.with_data(
                         |data: &mut GcCtxData|

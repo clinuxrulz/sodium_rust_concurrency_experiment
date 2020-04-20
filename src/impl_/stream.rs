@@ -39,7 +39,7 @@ impl<A:Send+'static> StreamWeakForwardRef<A> {
         *x = Some(Stream::downgrade(s))
     }
 
-    fn unwrap(&self) -> Stream<A> {
+    pub fn unwrap(&self) -> Stream<A> {
         let x = self.data.read().unwrap();
         (&*x).clone().unwrap().upgrade().unwrap()
     }

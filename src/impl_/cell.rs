@@ -6,6 +6,7 @@ use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
 use crate::impl_::stream::Stream;
 use crate::impl_::stream::WeakStream;
+use crate::impl_::stream::StreamWeakForwardRef;
 use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 use crate::impl_::lambda::IsLambda3;
@@ -229,7 +230,7 @@ impl<A:Send+'static> Cell<A> {
                             let mut changed = node.data.changed.write().unwrap();
                             *changed = true;
                         }
-                        sodium_ctx2.with_data(|data: &mut SodiumCtxData| data.changed_nodes.push(node));
+                        sodium_ctx2.with_data(|data: &mut SodiumCtxData| data.changed_nodes.push(node.clone()));
                         spark._send(a.clone());
                     });
                 });
@@ -382,14 +383,12 @@ impl<A:Send+'static> Cell<A> {
         let sodium_ctx = csa.sodium_ctx();
         Stream::_new(
             &sodium_ctx,
-            "Cell::switch_s",
-            |sa: &Stream<A>| {
+            |sa: StreamWeakForwardRef<A>| {
                 let inner_s: Arc<Mutex<WeakStream<A>>> = Arc::new(Mutex::new(Stream::downgrade(&csa.sample())));
                 let sa = sa.clone();
                 let node1: Node;
                 {
                     let inner_s = inner_s.clone();
-                    let sa = Stream::downgrade(&sa);
                     node1 = Node::new(
                         &sodium_ctx,
                         "switch_s inner node",
@@ -399,12 +398,12 @@ impl<A:Send+'static> Cell<A> {
                             let inner_s = inner_s.upgrade().unwrap();
                             inner_s.with_firing_op(|firing_op: &mut Option<A>| {
                                 if let Some(ref firing) = firing_op {
-                                    let sa = sa.upgrade().unwrap();
+                                    let sa = sa.unwrap();
                                     sa._send(firing.clone());
                                 }
                             });
                         },
-                        vec![csa.sample().node()]
+                        vec![csa.sample().box_clone()]
                     );
                 }
                 let node2: Node;
@@ -426,12 +425,12 @@ impl<A:Send+'static> Cell<A> {
                                         let old_deps;
                                         {
                                             let dependencies = node1.data.dependencies.read().unwrap();
-                                            old_deps = (*dependencies).clone();
+                                            old_deps = box_clone_vec_is_node(&*dependencies);
                                         }
                                         for dep in old_deps {
-                                            node1.remove_dependency(&dep);
+                                            IsNode::remove_dependency(&node1, dep.node());
                                         }
-                                        node1.add_dependency(firing.node());
+                                        IsNode::add_dependency(&node1, firing);
                                         let mut l = inner_s.lock();
                                         let inner_s: &mut WeakStream<A> = l.as_mut().unwrap();
                                         *inner_s = Stream::downgrade(&firing);
@@ -439,11 +438,11 @@ impl<A:Send+'static> Cell<A> {
                                 }
                             });
                         },
-                        vec![csa2.updates().node()]
+                        vec![csa2.updates().box_clone()]
                     );
                 }
-                node2.add_update_dependencies(vec![node1.gc_node.clone()]);
-                node1.add_keep_alive(&node2.gc_node);
+                IsNode::add_update_dependencies(&node2, vec![node1.gc_node.clone()]);
+                IsNode::add_keep_alive(&node1, &node2.gc_node);
                 return node1;
             }
         )

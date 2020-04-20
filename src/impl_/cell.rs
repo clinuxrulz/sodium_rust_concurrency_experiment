@@ -41,7 +41,7 @@ impl<A:Send+'static> CellWeakForwardRef<A> {
     }
 
     pub fn assign(&self, c: &Cell<A>) {
-        let x = self.data.write().unwrap();
+        let mut x = self.data.write().unwrap();
         *x = Some(Cell::downgrade(c))
     }
 
@@ -64,6 +64,15 @@ pub struct WeakCell<A> {
 impl<A> Clone for Cell<A> {
     fn clone(&self) -> Self {
         Cell {
+            data: self.data.clone(),
+            node: self.node.clone()
+        }
+    }
+}
+
+impl<A> Clone for WeakCell<A> {
+    fn clone(&self) -> Self {
+        WeakCell {
             data: self.data.clone(),
             node: self.node.clone()
         }
@@ -159,7 +168,7 @@ impl<A:Send+'static> Cell<A> {
         let c_forward_ref = CellWeakForwardRef::new();
         {
             let c = c_forward_ref.clone();
-            let stream_node = stream.node();
+            let stream_node = stream.box_clone();
             let stream_gc_node = stream.gc_node().clone();
             let sodium_ctx2 = sodium_ctx.clone();
             node = Node::new(
@@ -189,7 +198,7 @@ impl<A:Send+'static> Cell<A> {
                         }
                     }
                 },
-                vec![stream.box_clone()]
+                vec![stream_node]
             );
             IsNode::add_update_dependencies(&node, vec![stream_gc_node]);
         }
@@ -430,7 +439,7 @@ impl<A:Send+'static> Cell<A> {
                                         for dep in old_deps {
                                             IsNode::remove_dependency(&node1, dep.node());
                                         }
-                                        IsNode::add_dependency(&node1, firing);
+                                        IsNode::add_dependency(&node1, firing.clone());
                                         let mut l = inner_s.lock();
                                         let inner_s: &mut WeakStream<A> = l.as_mut().unwrap();
                                         *inner_s = Stream::downgrade(&firing);
@@ -502,7 +511,7 @@ impl<A:Send+'static> Cell<A> {
                                 let mut l = last_inner_s.lock();
                                 let last_inner_s: &mut WeakStream<A> = l.as_mut().unwrap();
                                 IsNode::remove_dependency(&node2, last_inner_s.upgrade().unwrap().node());
-                                IsNode::add_dependency(&node2, new_inner_s);
+                                IsNode::add_dependency(&node2, new_inner_s.clone());
                                 {
                                     let mut changed = node2.data.changed.write().unwrap();
                                     *changed = true;

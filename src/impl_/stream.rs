@@ -35,7 +35,7 @@ impl<A:Send+'static> StreamWeakForwardRef<A> {
     }
 
     pub fn assign(&self, s: &Stream<A>) {
-        let x = self.data.write().unwrap();
+        let mut x = self.data.write().unwrap();
         *x = Some(Stream::downgrade(s))
     }
 
@@ -275,6 +275,7 @@ impl<A:Send+'static> Stream<A> {
     pub fn merge<FN:IsLambda2<A,A,A>+Send+Sync+'static>(&self, s2: &Stream<A>, mut f: FN) -> Stream<A> where A: Clone {
         let self_ = self.clone();
         let s2 = s2.clone();
+        let s2_node = s2.box_clone();
         let s2_gc_node = s2.gc_node().clone();
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
@@ -301,7 +302,7 @@ impl<A:Send+'static> Stream<A> {
                             })
                         })
                     },
-                    vec![self.box_clone(), s2.box_clone()]
+                    vec![self.box_clone(), s2_node]
                 );
                 IsNode::add_update_dependencies(&node, f_deps);
                 IsNode::add_update_dependencies(&node, vec![self.gc_node().clone(), s2_gc_node]);
@@ -380,27 +381,25 @@ impl<A:Send+'static> Stream<A> {
         Stream::_new(
             &sodium_ctx,
             |s: StreamWeakForwardRef<A>| {
-                let s_ = s.clone();
                 let sodium_ctx = sodium_ctx.clone();
                 let sodium_ctx2 = sodium_ctx.clone();
-                let _self = self.clone();
                 let node = Node::new(
                     &sodium_ctx2,
                     "Stream::once",
                     move || {
-                        _self.with_firing_op(|firing_op: &mut Option<A>| {
+                        self_.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
                                 let s = s.unwrap();
                                 s._send(firing.clone());
-                                let node = s.node();
+                                let node = s.box_clone();
                                 sodium_ctx.post(move || {
                                     let deps;
                                     {
-                                        let dependencies = node.data.dependencies.read().unwrap();
+                                        let dependencies = node.data().dependencies.read().unwrap();
                                         deps = box_clone_vec_is_node(&(*dependencies));
                                     }
                                     for dep in deps {
-                                        IsNode::remove_dependency(node, dep.node());
+                                        IsNode::remove_dependency(node.node(), dep.node());
                                     }
                                 });
                             }
@@ -466,12 +465,12 @@ impl<A:Send+'static> Stream<A> {
             }
             if is_first {
                 let _self = self.clone();
-                let self_node = _self.node();
+                let self_node = _self.box_clone();
                 sodium_ctx.pre_post(move || {
                     _self.with_data(|data: &mut StreamData<A>| {
                         data.firing_op = None;
                         {
-                            let mut changed = self_node.data.changed.write().unwrap();
+                            let mut changed = self_node.data().changed.write().unwrap();
                             *changed = false;
                         }
                     });

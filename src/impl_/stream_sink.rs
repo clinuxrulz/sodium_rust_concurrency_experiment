@@ -44,9 +44,9 @@ impl<A:Send+'static> StreamSink<A> {
 
     pub fn send(&self, a: A) {
         self.sodium_ctx.transaction(|| {
-            let node = self.stream().node();
+            let node = self.stream();
             {
-                let mut changed = node.data.changed.write().unwrap();
+                let mut changed = node.data().changed.write().unwrap();
                 *changed = true;
             }
             self.sodium_ctx.with_data(|data: &mut SodiumCtxData| {

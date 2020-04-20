@@ -4,6 +4,7 @@ use std::sync::Weak;
 use std::fmt;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::borrow::Borrow;
 
 use crate::impl_::gc_node::{GcNode, Tracer};
 use crate::impl_::sodium_ctx::SodiumCtx;

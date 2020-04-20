@@ -1,6 +1,6 @@
 use crate::impl_::cell::Cell;
 use crate::impl_::gc_node::{GcNode, Tracer};
-use crate::impl_::node::{Node, WeakNode, IsNode, IsWeakNode};
+use crate::impl_::node::{Node, WeakNode, IsNode, IsWeakNode, box_clone_vec_is_node};
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::sodium_ctx::SodiumCtx;
@@ -369,45 +369,46 @@ impl<A:Send+'static> Stream<A> {
                 let a = a.clone();
                 sodium_ctx.post(move || ss.send(a.clone()))
             });
-            s.node().add_keep_alive(&listener.gc_node);
+            IsNode::add_keep_alive(&s, &listener.gc_node);
             return s;
         })
     }
 
     pub fn once(&self) -> Stream<A> where A: Clone {
+        let self_ = self.clone();
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
-            "Stream::once",
-            |s: &Stream<A>| {
+            |s: StreamWeakForwardRef<A>| {
                 let s_ = s.clone();
                 let sodium_ctx = sodium_ctx.clone();
                 let sodium_ctx2 = sodium_ctx.clone();
                 let _self = self.clone();
                 let node = Node::new(
                     &sodium_ctx2,
-                    "Stream::once node",
+                    "Stream::once",
                     move || {
                         _self.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
-                                s_._send(firing.clone());
-                                let node = s_.node();
+                                let s = s.unwrap();
+                                s._send(firing.clone());
+                                let node = s.node();
                                 sodium_ctx.post(move || {
                                     let deps;
                                     {
-                                        let dependencies = node.data.dependencies.write().unwrap();
-                                        deps = (*dependencies).clone();
+                                        let dependencies = node.data.dependencies.read().unwrap();
+                                        deps = box_clone_vec_is_node(&(*dependencies));
                                     }
                                     for dep in deps {
-                                        node.remove_dependency(&dep);
+                                        IsNode::remove_dependency(node, dep.node());
                                     }
                                 });
                             }
                         })
                     },
-                    vec![self.node()]
+                    vec![self.box_clone()]
                 );
-                node.add_update_dependencies(vec![self.gc_node.clone(), s.gc_node.clone()]);
+                IsNode::add_update_dependencies(&node, vec![self.gc_node().clone()]);
                 node
             }
         )

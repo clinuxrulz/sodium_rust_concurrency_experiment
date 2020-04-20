@@ -230,7 +230,7 @@ impl<A:Send+'static> Cell<A> {
                             let mut changed = node.data.changed.write().unwrap();
                             *changed = true;
                         }
-                        sodium_ctx2.with_data(|data: &mut SodiumCtxData| data.changed_nodes.push(node.clone()));
+                        sodium_ctx2.with_data(|data: &mut SodiumCtxData| data.changed_nodes.push(node.box_clone()));
                         spark._send(a.clone());
                     });
                 });

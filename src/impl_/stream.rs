@@ -207,7 +207,7 @@ impl<A:Send+'static> Stream<A> {
     pub fn snapshot<B:Send+Clone+'static,C:Send+'static,FN:IsLambda2<A,B,C>+Send+Sync+'static>(&self, cb: &Cell<B>, mut f: FN) -> Stream<C> {
         let cb = cb.clone();
         let mut f_deps = lambda2_deps(&f);
-        f_deps.push(cb.gc_node().clone());
+        f_deps.push(cb.node().gc_node().clone());
         self.map(lambda1(move |a: &A| f.call(a, &cb.sample()), f_deps))
     }
 

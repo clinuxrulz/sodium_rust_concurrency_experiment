@@ -89,7 +89,7 @@ impl<A:Send+Clone+'static> CellLoop<A> {
                 let l = cell_loop_data.lock();
                 let cell_loop_data = l.as_ref().unwrap();
                 tracer(&cell_loop_data.stream_loop.gc_node);
-                tracer(&cell_loop_data.cell.gc_node);
+                tracer(&cell_loop_data.cell.node().gc_node);
             };
         }
         CellLoop {

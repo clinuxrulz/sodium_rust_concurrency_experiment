@@ -1,4 +1,4 @@
-use crate::impl_::node::NodeData;
+use crate::impl_::node::IsNode;
 use crate::impl_::stream::Stream;
 use crate::impl_::stream::WeakStream;
 use crate::impl_::sodium_ctx::SodiumCtx;
@@ -50,7 +50,7 @@ impl<A:Send+'static> StreamSink<A> {
                 *changed = true;
             }
             self.sodium_ctx.with_data(|data: &mut SodiumCtxData| {
-                data.changed_nodes.push(node);
+                data.changed_nodes.push(node.box_clone());
             });
             self.stream._send(a);
         });

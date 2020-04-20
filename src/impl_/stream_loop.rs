@@ -1,5 +1,5 @@
 use crate::impl_::gc_node::{GcNode, Tracer};
-use crate::impl_::node::NodeData;
+use crate::impl_::node::IsNode;
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::stream::Stream;
 
@@ -60,7 +60,7 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
             gc_node_trace = move |tracer: &mut Tracer| {
                 let l = stream_loop_data.lock();
                 let stream_loop_data = l.as_ref().unwrap();
-                tracer(&stream_loop_data.stream.gc_node);
+                tracer(stream_loop_data.stream.gc_node());
             };
         }
         StreamLoop {
@@ -80,10 +80,10 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
             }
             data.looped = true;
             let node = data.stream.node();
-            node.add_dependency(s.node());
+            IsNode::add_dependency(node, s.clone());
             let s = s.clone();
             let s_out = data.stream.clone();
-            node.add_update_dependencies(vec![s.gc_node.clone(), s_out.gc_node.clone()]);
+            IsNode::add_update_dependencies(node, vec![s.gc_node().clone(), s_out.gc_node().clone()]);
             {
                 let mut node_update = node.data.update.write().unwrap();
                 *node_update = Box::new(move || {

@@ -1,5 +1,5 @@
 use crate::impl_::gc_node::{GcNode, Tracer};
-use crate::impl_::node::Node;
+use crate::impl_::node::{Node, IsNode};
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
 
@@ -106,7 +106,7 @@ impl fmt::Debug for Listener {
         match node_op {
             Some(node) => {
                 writeln!(f, "")?;
-                writeln!(f, "{:?})", node)?;
+                writeln!(f, "{:?})", &node as &(dyn IsNode+Sync+Sync))?;
             }
             None => {
                 writeln!(f, ")")?;

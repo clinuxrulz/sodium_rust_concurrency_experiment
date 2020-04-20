@@ -8,12 +8,12 @@ use std::collections::HashSet;
 use crate::impl_::gc_node::{GcNode, Tracer};
 use crate::impl_::sodium_ctx::SodiumCtx;
 
-pub trait IsNode {
+pub trait IsNode: Send + Sync {
     fn node(&self) -> &Node;
 
-    fn box_clone(&self) -> Box<dyn IsNode>;
+    fn box_clone(&self) -> Box<dyn IsNode + Send + Sync>;
 
-    fn downgrade(&self) -> Box<dyn IsWeakNode>;
+    fn downgrade(&self) -> Box<dyn IsWeakNode + Send + Sync>;
 
     fn gc_node(&self) -> &GcNode {
         &self.node().gc_node
@@ -24,12 +24,12 @@ pub trait IsNode {
     }
 }
 
-pub trait IsWeakNode {
+pub trait IsWeakNode: Send + Sync {
     fn weak_node(&self) -> &WeakNode;
 
-    fn box_clone(&self) -> Box<dyn IsWeakNode>;
+    fn box_clone(&self) -> Box<dyn IsWeakNode + Send + Sync>;
 
-    fn upgrade(&self) -> Option<Box<dyn IsNode>>;
+    fn upgrade(&self) -> Option<Box<dyn IsNode + Send + Sync>>;
 
     fn gc_node(&self) -> &GcNode {
         &self.weak_node().gc_node
@@ -40,7 +40,7 @@ pub trait IsWeakNode {
     }
 }
 
-pub fn box_clone_vec_is_node(xs: &Vec<Box<dyn IsNode>>) -> Vec<Box<dyn IsNode>> {
+pub fn box_clone_vec_is_node(xs: &Vec<Box<dyn IsNode + Send + Sync>>) -> Vec<Box<dyn IsNode + Send + Sync>> {
     let result = Vec::with_capacity(xs.len());
     for x in xs {
         result.push(x.box_clone());
@@ -48,7 +48,7 @@ pub fn box_clone_vec_is_node(xs: &Vec<Box<dyn IsNode>>) -> Vec<Box<dyn IsNode>> 
     result
 }
 
-pub fn box_clone_vec_is_weak_node(xs: &Vec<Box<dyn IsWeakNode>>) -> Vec<Box<dyn IsWeakNode>> {
+pub fn box_clone_vec_is_weak_node(xs: &Vec<Box<dyn IsWeakNode + Send + Sync>>) -> Vec<Box<dyn IsWeakNode + Send + Sync>> {
     let result = Vec::with_capacity(xs.len());
     for x in xs {
         result.push(x.box_clone());
@@ -61,11 +61,11 @@ impl IsNode for Node {
         self
     }
 
-    fn box_clone(&self) -> Box<dyn IsNode> {
+    fn box_clone(&self) -> Box<dyn IsNode + Send + Sync> {
         Box::new(self.clone())
     }
 
-    fn downgrade(&self) -> Box<dyn IsWeakNode> {
+    fn downgrade(&self) -> Box<dyn IsWeakNode + Send + Sync> {
         Box::new(Node::downgrade(self))
     }
 }
@@ -75,12 +75,12 @@ impl IsWeakNode for WeakNode {
         self
     }
 
-    fn box_clone(&self) -> Box<dyn IsWeakNode> {
+    fn box_clone(&self) -> Box<dyn IsWeakNode + Send + Sync> {
         Box::new(self.clone())
     }
 
-    fn upgrade(&self) -> Option<Box<dyn IsNode>> {
-        self.upgrade().map(|x| Box::new(x) as Box<dyn IsNode>)
+    fn upgrade(&self) -> Option<Box<dyn IsNode + Send + Sync>> {
+        self.upgrade().map(|x| Box::new(x) as Box<dyn IsNode + Send + Sync>)
     }
 }
 
@@ -95,8 +95,8 @@ pub struct NodeData {
     pub changed: RwLock<bool>,
     pub update: RwLock<Box<dyn FnMut()+Send+Sync>>,
     pub update_dependencies: RwLock<Vec<GcNode>>,
-    pub dependencies: RwLock<Vec<Box<dyn IsNode>>>,
-    pub dependents: RwLock<Vec<Box<dyn IsWeakNode>>>,
+    pub dependencies: RwLock<Vec<Box<dyn IsNode+Send+Sync>>>,
+    pub dependents: RwLock<Vec<Box<dyn IsWeakNode+Send+Sync>>>,
     pub keep_alive: RwLock<Vec<GcNode>>,
     pub sodium_ctx: SodiumCtx
 }
@@ -134,7 +134,7 @@ impl Drop for NodeData {
 }
 
 impl Node {
-    pub fn new<NAME:ToString,UPDATE:FnMut()+Send+Sync+'static>(sodium_ctx: &SodiumCtx, name:NAME, update: UPDATE, dependencies: Vec<Box<dyn IsNode>>) -> Self {
+    pub fn new<NAME:ToString,UPDATE:FnMut()+Send+Sync+'static>(sodium_ctx: &SodiumCtx, name:NAME, update: UPDATE, dependencies: Vec<Box<dyn IsNode+Send+Sync>>) -> Self {
         let result_forward_ref: Arc<RwLock<Option<Weak<NodeData>>>> = Arc::new(RwLock::new(None));
         let deconstructor;
         let trace;

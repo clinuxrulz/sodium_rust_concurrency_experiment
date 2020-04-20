@@ -4,7 +4,6 @@ use std::sync::Weak;
 use std::fmt;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::borrow::Borrow;
 
 use crate::impl_::gc_node::{GcNode, Tracer};
 use crate::impl_::sodium_ctx::SodiumCtx;
@@ -112,16 +111,12 @@ impl IsNode for Node {
     }
 
     fn downgrade(&self) -> Box<dyn IsWeakNode + Send + Sync> {
-        Box::new(WeakNode {
-            data: Arc::downgrade(&self.data),
-            gc_node: self.gc_node.clone(),
-            sodium_ctx: self.sodium_ctx.clone()
-        })
+        Box::new(Node::downgrade2(self))
     }
 }
 
 impl IsWeakNode for WeakNode {
-    fn weak_node(&self) -> &WeakNode {
+    fn node(&self) -> &WeakNode {
         self
     }
 
@@ -130,16 +125,7 @@ impl IsWeakNode for WeakNode {
     }
 
     fn upgrade(&self) -> Option<Box<dyn IsNode + Send + Sync>> {
-        self.data.upgrade().map(
-            |data| {
-                self.gc_node.inc_ref();
-                Box::new(Node {
-                    data,
-                    gc_node: self.gc_node.clone(),
-                    sodium_ctx: self.sodium_ctx.clone()
-                }) as Box<dyn IsNode + Send + Sync>
-            }
-        )
+        self.upgrade2().map(|x| Box::new(x) as Box<dyn IsNode + Send + Sync>)
     }
 }
 
@@ -325,10 +311,18 @@ impl Node {
         sodium_ctx.inc_node_count();
         return result;
     }
+
+    pub fn downgrade2(this: &Self) -> WeakNode {
+        WeakNode {
+            data: Arc::downgrade(&this.data),
+            gc_node: this.gc_node.clone(),
+            sodium_ctx: this.sodium_ctx.clone()
+        }
+    }
 }
 
 impl WeakNode {
-    pub fn upgrade(&self) -> Option<Node> {
+    pub fn upgrade2(&self) -> Option<Node> {
         if let Some(data) = self.data.upgrade() {
             self.gc_node.inc_ref();
             self.sodium_ctx.inc_node_ref_count();

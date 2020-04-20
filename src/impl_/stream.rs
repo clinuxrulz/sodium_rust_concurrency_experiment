@@ -416,11 +416,10 @@ impl<A:Send+'static> Stream<A> {
 
     pub fn _listen<K:IsLambda1<A,()>+Send+Sync+'static>(&self, mut k: K, weak: bool) -> Listener {
         let self_ = self.clone();
-        let self_gc_node = self.gc_node.clone();
         let node =
             Node::new(
                 &self.sodium_ctx(),
-                "Stream::listen node",
+                "Stream::listen",
                 move || {
                     self_.with_data(|data: &mut StreamData<A>| {
                         for firing in &data.firing_op {
@@ -428,9 +427,9 @@ impl<A:Send+'static> Stream<A> {
                         }
                     });
                 },
-                vec![self.node()]
+                vec![self.box_clone()]
             );
-        node.add_update_dependencies(vec![self_gc_node]);
+        IsNode::add_update_dependencies(&node, vec![self.gc_node().clone()]);
         Listener::new(&self.sodium_ctx(), weak, node)
     }
 
@@ -484,7 +483,7 @@ impl<A:Send+'static> Stream<A> {
     pub fn downgrade(this: &Self) -> WeakStream<A> {
         WeakStream {
             data: Arc::downgrade(&this.data),
-            gc_node: this.gc_node.clone()
+            node: Node::downgrade2(&this.node)
         }
     }
 }
@@ -492,11 +491,12 @@ impl<A:Send+'static> Stream<A> {
 impl<A> WeakStream<A> {
     pub fn upgrade(&self) -> Option<Stream<A>> {
         let data_op = self.data.upgrade();
-        if let Some(data) = data_op {
-            let s = Stream { data, gc_node: self.gc_node.clone() };
-            s.gc_node.inc_ref();
-            return Some(s);
+        let node_op = self.node.upgrade2();
+        if data_op.is_none() || node_op.is_none() {
+            return None;
         }
-        None
+        let data = data_op.unwrap();
+        let node = node_op.unwrap();
+        Some(Stream { data, node })
     }
 }

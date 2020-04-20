@@ -1,6 +1,6 @@
 use crate::impl_::cell::Cell;
 use crate::impl_::gc_node::{GcNode, Tracer};
-use crate::impl_::node::{Node, NodeData};
+use crate::impl_::node::{Node, WeakNode, IsNode, IsWeakNode};
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
 use crate::impl_::sodium_ctx::SodiumCtx;
@@ -10,34 +10,77 @@ use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 use crate::impl_::lambda::{lambda1, lambda1_deps, lambda2_deps};
 
-use std::mem;
 use std::sync::Arc;
+use std::sync::RwLock;
 use std::sync::Mutex;
 use std::sync::Weak;
 
+pub struct StreamWeakForwardRef<A> {
+    data: Arc<RwLock<Option<WeakStream<A>>>>
+}
+
+impl<A:Send+'static> StreamWeakForwardRef<A> {
+    pub fn new() -> StreamWeakForwardRef<A> {
+        StreamWeakForwardRef {
+            data: Arc::new(RwLock::new(None))
+        }
+    }
+
+    pub fn assign(&self, s: &Stream<A>) {
+        let x = self.data.write().unwrap();
+        *x = Some(Stream::downgrade(s))
+    }
+
+    fn unwrap(&self) -> Stream<A> {
+        let x = self.data.read().unwrap();
+        (&*x).clone().unwrap().upgrade().unwrap()
+    }
+}
+
 pub struct Stream<A> {
     pub data: Arc<Mutex<StreamData<A>>>,
-    pub gc_node: GcNode
+    pub node: Node
 }
 
 pub struct WeakStream<A> {
     pub data: Weak<Mutex<StreamData<A>>>,
-    pub gc_node: GcNode
+    pub node: WeakNode
+}
+
+impl<A:Send+'static> IsNode for Stream<A> {
+    fn node(&self) -> &Node {
+        &self.node
+    }
+
+    fn box_clone(&self) -> Box<dyn IsNode + Send + Sync> {
+        Box::new(self.clone())
+    }
+
+    fn downgrade(&self) -> Box<dyn IsWeakNode + Send + Sync> {
+        Box::new(Stream::downgrade(self))
+    }
+}
+
+impl<A:Send+'static> IsWeakNode for WeakStream<A> {
+    fn node(&self) -> &WeakNode {
+        &self.node
+    }
+
+    fn box_clone(&self) -> Box<dyn IsWeakNode + Send + Sync> {
+        Box::new(self.clone())
+    }
+
+    fn upgrade(&self) -> Option<Box<dyn IsNode + Send + Sync>> {
+        WeakStream::upgrade(self).map(|x| Box::new(x) as Box<dyn IsNode + Send + Sync>)
+    }
 }
 
 impl<A> Clone for Stream<A> {
     fn clone(&self) -> Self {
-        self.gc_node.inc_ref();
         Stream {
             data: self.data.clone(),
-            gc_node: self.gc_node.clone()
+            node: self.node.clone()
         }
-    }
-}
-
-impl<A> Drop for Stream<A> {
-    fn drop(&mut self) {
-        self.gc_node.dec_ref();
     }
 }
 
@@ -45,13 +88,12 @@ impl<A> Clone for WeakStream<A> {
     fn clone(&self) -> Self {
         WeakStream {
             data: self.data.clone(),
-            gc_node: self.gc_node.clone()
+            node: self.node.clone()
         }
     }
 }
 
 pub struct StreamData<A> {
-    pub node: Node,
     pub firing_op: Option<A>,
     pub sodium_ctx: SodiumCtx,
     pub coalescer_op: Option<Box<dyn FnMut(&A,&A)->A+Send>>
@@ -68,8 +110,8 @@ impl<A> Stream<A> {
         self.with_data(|data: &mut StreamData<A>| k(&mut data.firing_op))
     }
 
-    pub fn node(&self) -> Node {
-        self.with_data(|data: &mut StreamData<A>| data.node.clone())
+    pub fn node(&self) -> &Node {
+        &self.node
     }
 
     pub fn sodium_ctx(&self) -> SodiumCtx {
@@ -82,16 +124,13 @@ impl<A:Send+'static> Stream<A> {
     pub fn new(sodium_ctx: &SodiumCtx) -> Stream<A> {
         Stream::_new(
             sodium_ctx,
-            "Stream::new",
-            |_s: &Stream<A>| {
-                let node = Node::new(
+            |_s: &Arc<RwLock<Option<WeakStream<A>>>>| {
+                Node::new(
                     sodium_ctx,
-                    "Stream::new node",
+                    "Stream::new",
                     || {},
                     Vec::new()
-                );
-                node.add_keep_alive(&_s.gc_node);
-                node
+                )
             }
         )
     }
@@ -100,91 +139,41 @@ impl<A:Send+'static> Stream<A> {
     pub fn nop(&self) {}
 
     pub fn _new_with_coalescer<COALESCER:FnMut(&A,&A)->A+Send+'static>(sodium_ctx: &SodiumCtx, coalescer: COALESCER) -> Stream<A> {
-        let result_forward_ref: Arc<Mutex<Option<Arc<Mutex<StreamData<A>>>>>> = Arc::new(Mutex::new(None));
-        let result;
-        {
-            let result_forward_ref = result_forward_ref.clone();
-            result = Stream {
-                data: Arc::new(Mutex::new(StreamData {
-                    node: sodium_ctx.null_node(),
-                    firing_op: None,
-                    sodium_ctx: sodium_ctx.clone(),
-                    coalescer_op: Some(Box::new(coalescer))
-                })),
-                gc_node: GcNode::new(
-                    &sodium_ctx.gc_ctx(),
-                    "Stream::_new_with_coalescer",
-                    || {},
-                    move |tracer: &mut Tracer| {
-                        let l = result_forward_ref.lock();
-                        let s = l.as_ref().unwrap();
-                        let s: &Option<Arc<Mutex<StreamData<A>>>> = &s;
-                        let s: Arc<Mutex<StreamData<A>>> = s.clone().unwrap();
-                        let l = s.lock();
-                        let s = l.as_ref().unwrap();
-                        tracer(&s.node.gc_node);
-                    }
-                )
-            };
+        Stream {
+            data: Arc::new(Mutex::new(StreamData {
+                firing_op: None,
+                sodium_ctx: sodium_ctx.clone(),
+                coalescer_op: Some(Box::new(coalescer))
+            })),
+            node: Node::new(
+                &sodium_ctx,
+                "Stream::_new_with_coalescer",
+                || {},
+                vec![]
+            )
         }
-        {
-            let mut l = result_forward_ref.lock();
-            let mut result_forward_ref = l.as_mut().unwrap();
-            let result_forward_ref: &mut Option<Arc<Mutex<StreamData<A>>>> = &mut result_forward_ref;
-            *result_forward_ref = Some(result.data.clone());
-        }
-        result
     }
 
-    pub fn _new<NAME:ToString,MkNode:FnOnce(&Stream<A>)->Node>(sodium_ctx: &SodiumCtx, name: NAME, mk_node: MkNode) -> Stream<A> {
-        let result_forward_ref: Arc<Mutex<Option<Arc<Mutex<StreamData<A>>>>>> = Arc::new(Mutex::new(None));
+    pub fn _new<MkNode:FnOnce(&Arc<RwLock<Option<WeakStream<A>>>>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MkNode) -> Stream<A> {
+        let result_forward_ref: Arc<RwLock<Option<WeakStream<A>>>> = Arc::new(RwLock::new(None));
         let s;
+        let node = mk_node(&result_forward_ref);
         {
             let result_forward_ref = result_forward_ref.clone();
             let result_forward_ref2 = result_forward_ref.clone();
             let sodium_ctx2 = sodium_ctx.clone();
             s = Stream {
                 data: Arc::new(Mutex::new(StreamData {
-                    node: sodium_ctx.null_node(),
                     firing_op: None,
                     sodium_ctx: sodium_ctx.clone(),
                     coalescer_op: None
                 })),
-                gc_node: GcNode::new(
-                    &sodium_ctx.gc_ctx(),
-                    name.to_string(),
-                    move || {
-                        let l = result_forward_ref2.lock();
-                        let s = l.as_ref().unwrap();
-                        let s: &Option<Arc<Mutex<StreamData<A>>>> = &s;
-                        let s: Arc<Mutex<StreamData<A>>> = s.clone().unwrap();
-                        let mut l = s.lock();
-                        let s = l.as_mut().unwrap();
-                        s.node = sodium_ctx2.null_node();
-                    },
-                    move |tracer: &mut Tracer| {
-                        let gc_node;
-                        {
-                            let l = result_forward_ref.lock();
-                            let s = l.as_ref().unwrap();
-                            let s: &Option<Arc<Mutex<StreamData<A>>>> = &s;
-                            let s: Arc<Mutex<StreamData<A>>> = s.clone().unwrap();
-                            let l = s.lock();
-                            let s = l.as_ref().unwrap();
-                            gc_node = s.node.gc_node.clone();
-                        }
-                        tracer(&gc_node);
-                    }
-                )
+                node: node.clone()
             };
         }
-        let node = mk_node(&s);
-        s.with_data(|data: &mut StreamData<A>| data.node = node.clone());
         {
-            let mut l = result_forward_ref.lock();
-            let mut result_forward_ref = l.as_mut().unwrap();
-            let result_forward_ref: &mut Option<Arc<Mutex<StreamData<A>>>> = &mut result_forward_ref;
-            *result_forward_ref = Some(s.data.clone());
+            let mut result_forward_ref = result_forward_ref.write().unwrap();
+            *result_forward_ref = Some(Stream::downgrade(&s));
         }
         {
             let mut update = node.data.update.write().unwrap();

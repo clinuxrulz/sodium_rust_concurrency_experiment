@@ -70,18 +70,18 @@ impl dyn IsNode {
 }
 
 pub trait IsWeakNode: Send + Sync {
-    fn weak_node(&self) -> &WeakNode;
+    fn node(&self) -> &WeakNode;
 
     fn box_clone(&self) -> Box<dyn IsWeakNode + Send + Sync>;
 
     fn upgrade(&self) -> Option<Box<dyn IsNode + Send + Sync>>;
 
     fn gc_node(&self) -> &GcNode {
-        &self.weak_node().gc_node
+        &self.node().gc_node
     }
 
     fn data(&self) -> &Weak<NodeData> {
-        &self.weak_node().data
+        &self.node().data
     }
 }
 

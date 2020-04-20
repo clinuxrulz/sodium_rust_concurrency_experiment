@@ -26,14 +26,14 @@ pub trait IsNode: Send + Sync {
 
 impl dyn IsNode {
 
-    fn add_update_dependencies(&self, update_dependencies: Vec<GcNode>) {
+    pub fn add_update_dependencies(&self, update_dependencies: Vec<GcNode>) {
         let mut update_dependencies2 = self.data().update_dependencies.write().unwrap();
         for dep in update_dependencies {
             update_dependencies2.push(dep);
         }
     }
 
-    fn add_dependency<NODE: IsNode+Sync+Sync>(&self, dependency: NODE) {
+    pub fn add_dependency<NODE: IsNode+Sync+Sync>(&self, dependency: NODE) {
         {
             let mut dependencies = self.data().dependencies.write().unwrap();
             dependencies.push(dependency.box_clone());

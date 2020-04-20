@@ -15,9 +15,16 @@ use std::sync::RwLock;
 use std::sync::Mutex;
 use std::sync::Weak;
 
-#[derive(Clone)]
 pub struct StreamWeakForwardRef<A> {
     data: Arc<RwLock<Option<WeakStream<A>>>>
+}
+
+impl<A> Clone for StreamWeakForwardRef<A> {
+    fn clone(&self) -> Self {
+        StreamWeakForwardRef {
+            data: self.data.clone()
+        }
+    }
 }
 
 impl<A:Send+'static> StreamWeakForwardRef<A> {
@@ -125,7 +132,7 @@ impl<A:Send+'static> Stream<A> {
     pub fn new(sodium_ctx: &SodiumCtx) -> Stream<A> {
         Stream::_new(
             sodium_ctx,
-            |_s: &StreamWeakForwardRef<A>| {
+            |_s: StreamWeakForwardRef<A>| {
                 Node::new(
                     sodium_ctx,
                     "Stream::new",
@@ -155,10 +162,10 @@ impl<A:Send+'static> Stream<A> {
         }
     }
 
-    pub fn _new<MkNode:FnOnce(&StreamWeakForwardRef<A>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MkNode) -> Stream<A> {
+    pub fn _new<MkNode:FnOnce(StreamWeakForwardRef<A>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MkNode) -> Stream<A> {
         let result_forward_ref: StreamWeakForwardRef<A> = StreamWeakForwardRef::new();
         let s;
-        let node = mk_node(&result_forward_ref);
+        let node = mk_node(result_forward_ref.clone());
         {
             let sodium_ctx2 = sodium_ctx.clone();
             s = Stream {
@@ -213,8 +220,7 @@ impl<A:Send+'static> Stream<A> {
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
-            |s: &StreamWeakForwardRef<B>| {
-                let _s = s.clone();
+            |s: StreamWeakForwardRef<B>| {
                 let f_deps = lambda1_deps(&f);
                 let node = Node::new(
                     &sodium_ctx,
@@ -222,14 +228,13 @@ impl<A:Send+'static> Stream<A> {
                     move || {
                         self_.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
-                                _s.unwrap()._send(f.call(firing));
+                                s.unwrap()._send(f.call(firing));
                             }
                         })
                     },
-                    vec![Box::new(self) as Box<dyn IsNode + Send + Sync>]
+                    vec![self.box_clone()]
                 );
-                node.add_update_dependencies(f_deps);
-                node.add_update_dependencies(vec![self.gc_node.clone()]);
+                IsNode::add_update_dependencies(&node, f_deps);
                 node
             }
         )

@@ -454,13 +454,12 @@ impl<A:Send+'static> Cell<A> {
         let sodium_ctx = cca.sodium_ctx();
         Stream::_new(
             &sodium_ctx,
-            "Cell::switch_c",
-            |sa: &Stream<A>| {
+            |sa: StreamWeakForwardRef<A>| {
                 let node1 = Node::new(
                     &sodium_ctx,
                     "switch_c outer node",
                     || {},
-                    vec![cca.updates().node()]
+                    vec![cca.updates().box_clone()]
                 );
                 let init_inner_s = cca.sample().updates();
                 let last_inner_s = Arc::new(Mutex::new(Stream::downgrade(&init_inner_s)));
@@ -468,7 +467,7 @@ impl<A:Send+'static> Cell<A> {
                     &sodium_ctx,
                     "switch_c inner node",
                     || {},
-                    vec![node1.clone(), init_inner_s.node()]
+                    vec![node1.box_clone(), init_inner_s.box_clone()]
                 );
                 let node1_update;
                 {
@@ -476,14 +475,14 @@ impl<A:Send+'static> Cell<A> {
                     let node1 = node1.clone();
                     let node2 = node2.clone();
                     let cca = cca.clone();
-                    let sa = Stream::downgrade(sa);
+                    let sa = sa.clone();
                     let last_inner_s = last_inner_s.clone();
                     node1_update = move || {
                         cca.updates().with_firing_op(|firing_op: &mut Option<Cell<A>>| {
                             if let Some(ref firing) = firing_op {
                                 // will be overwriten by node2 firing if there is one
                                 sodium_ctx.update_node(&firing.updates().node());
-                                let sa = sa.upgrade().unwrap();
+                                let sa = sa.unwrap();
                                 sa._send(firing.sample());
                                 //
                                 {
@@ -502,8 +501,8 @@ impl<A:Send+'static> Cell<A> {
                                 });
                                 let mut l = last_inner_s.lock();
                                 let last_inner_s: &mut WeakStream<A> = l.as_mut().unwrap();
-                                node2.remove_dependency(&last_inner_s.upgrade().unwrap().node());
-                                node2.add_dependency(new_inner_s.node());
+                                IsNode::remove_dependency(&node2, last_inner_s.upgrade().unwrap().node());
+                                IsNode::add_dependency(&node2, new_inner_s);
                                 {
                                     let mut changed = node2.data.changed.write().unwrap();
                                     *changed = true;
@@ -513,21 +512,20 @@ impl<A:Send+'static> Cell<A> {
                         });
                     };
                 }
-                node1.add_update_dependencies(vec![node1.gc_node.clone(), node2.gc_node.clone()]);
+                IsNode::add_update_dependencies(&node1, vec![node1.gc_node.clone(), node2.gc_node.clone()]);
                 {
                     let mut update = node1.data.update.write().unwrap();
                     *update = Box::new(node1_update);
                 }
                 {
                     let last_inner_s = last_inner_s.clone();
-                    let sa = Stream::downgrade(sa);
                     let node2_update = move || {
                         let l = last_inner_s.lock();
                         let last_inner_s: &WeakStream<A> = l.as_ref().unwrap();
                         let last_inner_s = last_inner_s.upgrade().unwrap();
                         last_inner_s.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
-                                let sa = sa.upgrade().unwrap();
+                                let sa = sa.unwrap();
                                 sa._send(firing.clone());
                             }
                         });
@@ -558,17 +556,20 @@ impl<A:Send+'static> Cell<A> {
     pub fn downgrade(this: &Self) -> WeakCell<A> {
         WeakCell {
             data: Arc::downgrade(&this.data),
-            gc_node: this.gc_node.clone()
+            node: Node::downgrade2(&this.node)
         }
     }
 }
 
 impl<A> WeakCell<A> {
     pub fn upgrade(&self) -> Option<Cell<A>> {
-        if let Some(data) = self.data.upgrade() {
-            self.gc_node.inc_ref();
-            return Some(Cell { data, gc_node: self.gc_node.clone() });
+        let data_op = self.data.upgrade();
+        let node_op = self.node.upgrade2();
+        if data_op.is_none() || node_op.is_none() {
+            return None;
         }
-        None
+        let data = data_op.unwrap();
+        let node = node_op.unwrap();
+        Some(Cell { data, node })
     }
 }

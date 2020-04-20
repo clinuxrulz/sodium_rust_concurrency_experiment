@@ -15,6 +15,7 @@ use std::sync::RwLock;
 use std::sync::Mutex;
 use std::sync::Weak;
 
+#[derive(Clone)]
 pub struct StreamWeakForwardRef<A> {
     data: Arc<RwLock<Option<WeakStream<A>>>>
 }
@@ -124,7 +125,7 @@ impl<A:Send+'static> Stream<A> {
     pub fn new(sodium_ctx: &SodiumCtx) -> Stream<A> {
         Stream::_new(
             sodium_ctx,
-            |_s: &Arc<RwLock<Option<WeakStream<A>>>>| {
+            |_s: &StreamWeakForwardRef<A>| {
                 Node::new(
                     sodium_ctx,
                     "Stream::new",
@@ -154,13 +155,11 @@ impl<A:Send+'static> Stream<A> {
         }
     }
 
-    pub fn _new<MkNode:FnOnce(&Arc<RwLock<Option<WeakStream<A>>>>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MkNode) -> Stream<A> {
-        let result_forward_ref: Arc<RwLock<Option<WeakStream<A>>>> = Arc::new(RwLock::new(None));
+    pub fn _new<MkNode:FnOnce(&StreamWeakForwardRef<A>)->Node>(sodium_ctx: &SodiumCtx, mk_node: MkNode) -> Stream<A> {
+        let result_forward_ref: StreamWeakForwardRef<A> = StreamWeakForwardRef::new();
         let s;
         let node = mk_node(&result_forward_ref);
         {
-            let result_forward_ref = result_forward_ref.clone();
-            let result_forward_ref2 = result_forward_ref.clone();
             let sodium_ctx2 = sodium_ctx.clone();
             s = Stream {
                 data: Arc::new(Mutex::new(StreamData {
@@ -171,10 +170,7 @@ impl<A:Send+'static> Stream<A> {
                 node: node.clone()
             };
         }
-        {
-            let mut result_forward_ref = result_forward_ref.write().unwrap();
-            *result_forward_ref = Some(Stream::downgrade(&s));
-        }
+        result_forward_ref.assign(&s);
         {
             let mut update = node.data.update.write().unwrap();
             let update: &mut Box<_> = &mut update;
@@ -217,24 +213,23 @@ impl<A:Send+'static> Stream<A> {
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
-            "Stream::map",
-            |s: &Stream<B>| {
+            |s: &StreamWeakForwardRef<B>| {
                 let _s = s.clone();
                 let f_deps = lambda1_deps(&f);
                 let node = Node::new(
                     &sodium_ctx,
-                    "Stream::map node",
+                    "Stream::map",
                     move || {
                         self_.with_firing_op(|firing_op: &mut Option<A>| {
                             if let Some(ref firing) = firing_op {
-                                _s._send(f.call(firing));
+                                _s.unwrap()._send(f.call(firing));
                             }
                         })
                     },
-                    vec![self.node()]
+                    vec![Box::new(self) as Box<dyn IsNode + Send + Sync>]
                 );
                 node.add_update_dependencies(f_deps);
-                node.add_update_dependencies(vec![self.gc_node.clone(), s.gc_node.clone()]);
+                node.add_update_dependencies(vec![self.gc_node.clone()]);
                 node
             }
         )

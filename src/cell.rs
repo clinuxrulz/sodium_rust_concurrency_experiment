@@ -35,7 +35,7 @@ impl<A:Clone+Send+'static> Cell<A> {
     }
 
     pub fn node(&self) -> Node {
-        self.impl_.updates().node()
+        self.impl_.node().clone()
     }
 
     pub fn updates(&self) -> Stream<A> {

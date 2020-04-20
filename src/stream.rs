@@ -37,7 +37,7 @@ impl<A:Clone+Send+'static> Stream<A> {
 
     // use as dependency to lambda1, lambda2, etc.
     pub fn node(&self) -> Node {
-        self.impl_.node()
+        self.impl_.node().clone()
     }
 
     pub fn snapshot<B:Clone+Send+'static,C:Clone+Send+'static,FN:IsLambda2<A,B,C>+Send+Sync+'static>(&self, cb: &Cell<B>, f: FN) -> Stream<C> {
@@ -89,7 +89,7 @@ impl<A:Clone+Send+'static> Stream<A> {
 
     pub fn gate(&self, cpred: &Cell<bool>) -> Stream<A> {
         let cpred = cpred.clone();
-        let cpred_dep = cpred.impl_.gc_node.clone();
+        let cpred_dep = cpred.impl_.node().gc_node.clone();
         self.filter(lambda1(move |_: &A| cpred.sample(), vec![cpred_dep]))
     }
 

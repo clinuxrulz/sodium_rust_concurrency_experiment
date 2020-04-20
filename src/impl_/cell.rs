@@ -21,7 +21,7 @@ use std::sync::RwLock;
 use std::sync::Weak;
 
 pub struct CellWeakForwardRef<A> {
-    data: Arc<RwLock<Option<Cell<A>>>>
+    data: Arc<RwLock<Option<WeakCell<A>>>>
 }
 
 impl<A> Clone for CellWeakForwardRef<A> {
@@ -29,6 +29,24 @@ impl<A> Clone for CellWeakForwardRef<A> {
         CellWeakForwardRef {
             data: self.data.clone()
         }
+    }
+}
+
+impl<A:Send+'static> CellWeakForwardRef<A> {
+    pub fn new() -> CellWeakForwardRef<A> {
+        CellWeakForwardRef {
+            data: Arc::new(RwLock::new(None))
+        }
+    }
+
+    pub fn assign(&self, c: &Cell<A>) {
+        let x = self.data.write().unwrap();
+        *x = Some(Cell::downgrade(c))
+    }
+
+    fn unwrap(&self) -> Cell<A> {
+        let x = self.data.read().unwrap();
+        (&*x).clone().unwrap().upgrade().unwrap()
     }
 }
 

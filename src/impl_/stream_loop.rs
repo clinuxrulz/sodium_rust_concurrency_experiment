@@ -56,8 +56,13 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
         }
         let gc_node_trace;
         {
-            let stream_loop_data = stream_loop_data.clone();
+            let stream_loop_data = Arc::downgrade(&stream_loop_data);
             gc_node_trace = move |tracer: &mut Tracer| {
+                let stream_loop_data_op = stream_loop_data.upgrade();
+                if stream_loop_data_op.is_none() {
+                    return;
+                }
+                let stream_loop_data = stream_loop_data_op.unwrap();
                 let l = stream_loop_data.lock();
                 let stream_loop_data = l.as_ref().unwrap();
                 tracer(stream_loop_data.stream.gc_node());
@@ -82,14 +87,14 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
             let node = data.stream.node();
             IsNode::add_dependency(node, s.clone());
             let s = s.clone();
-            let s_out = data.stream.clone();
-            IsNode::add_update_dependencies(node, vec![s.gc_node().clone(), s_out.gc_node().clone()]);
+            let s_out = Stream::downgrade(&data.stream);
+            IsNode::add_update_dependencies(node, vec![s.gc_node().clone()]);
             {
                 let mut node_update = node.data.update.write().unwrap();
                 *node_update = Box::new(move || {
                     s.with_firing_op(|firing_op: &mut Option<A>| {
                         if let Some(ref firing) = firing_op {
-                            s_out._send(firing.clone());
+                            s_out.upgrade().unwrap()._send(firing.clone());
                         }
                     });
                 });

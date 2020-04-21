@@ -171,7 +171,6 @@ impl<A:Send+'static> Stream<A> {
         let s;
         let node = mk_node(result_forward_ref.clone());
         {
-            let sodium_ctx2 = sodium_ctx.clone();
             s = Stream {
                 data: Arc::new(Mutex::new(StreamData {
                     firing_op: None,
@@ -280,7 +279,6 @@ impl<A:Send+'static> Stream<A> {
         let self_ = self.clone();
         let s2 = s2.clone();
         let s2_node = s2.box_clone();
-        let s2_gc_node = s2.gc_node().clone();
         let s2_dep = s2.to_dep();
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(

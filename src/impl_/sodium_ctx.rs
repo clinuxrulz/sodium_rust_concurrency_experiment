@@ -85,6 +85,7 @@ pub fn single_threaded_mode() -> ThreadedMode {
     }
 }
 
+#[allow(dead_code)]
 pub fn simple_threaded_mode() -> ThreadedMode {
     ThreadedMode {
         spawner: ThreadSpawner {

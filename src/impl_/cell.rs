@@ -144,7 +144,6 @@ impl<A:Send+'static> Cell<A> {
         {
             let c = c_forward_ref.clone();
             let stream_node = stream.box_clone();
-            let stream_gc_node = stream.gc_node().clone();
             let stream_dep = stream.to_dep();
             let sodium_ctx2 = sodium_ctx.clone();
             node = Node::new(

@@ -388,42 +388,36 @@ impl<A:Send+'static> Cell<A> {
                     );
                 }
                 let node2: Node;
+                let csa_updates = csa.updates();
+                let csa_updates_node = csa_updates.box_clone();
                 {
                     let node1: Node = node1.clone();
-                    let csa2 = csa.clone();
                     let sodium_ctx = sodium_ctx.clone();
                     let sodium_ctx2 = sodium_ctx.clone();
                     node2 = Node::new(
                         &sodium_ctx2,
                         "switch_s outer node",
                         move || {
-                            csa.updates().with_firing_op(|firing_op: &mut Option<Stream<A>>| {
+                            csa_updates.with_firing_op(|firing_op: &mut Option<Stream<A>>| {
                                 if let Some(ref firing) = firing_op {
                                     let firing = firing.clone();
                                     let node1 = node1.clone();
                                     let inner_s = inner_s.clone();
                                     sodium_ctx.pre_post(move || {
-                                        let old_deps;
-                                        {
-                                            let dependencies = node1.data.dependencies.read().unwrap();
-                                            old_deps = box_clone_vec_is_node(&*dependencies);
-                                        }
-                                        for dep in old_deps {
-                                            IsNode::remove_dependency(&node1, dep.node());
-                                        }
-                                        IsNode::add_dependency(&node1, firing.clone());
                                         let mut l = inner_s.lock();
                                         let inner_s: &mut WeakStream<A> = l.as_mut().unwrap();
+                                        IsNode::remove_dependency(&node1, &inner_s.upgrade().unwrap());
+                                        IsNode::add_dependency(&node1, firing.clone());
                                         *inner_s = Stream::downgrade(&firing);
                                     });
                                 }
                             });
                         },
-                        vec![csa2.updates().box_clone()]
+                        vec![csa_updates_node.box_clone()]
                     );
                 }
-                IsNode::add_update_dependencies(&node2, vec![node1.gc_node.clone()]);
-                IsNode::add_keep_alive(&node1, &node2.gc_node);
+                IsNode::add_update_dependencies(&node2, vec![csa_updates_node.gc_node().clone(), node1.gc_node().clone()]);
+                IsNode::add_dependency(&node1, node2.clone());
                 return node1;
             }
         )

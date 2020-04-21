@@ -84,13 +84,12 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
                 panic!("StreamLoop already looped.");
             }
             data.looped = true;
-            let node = data.stream.node();
-            IsNode::add_dependency(node, s.clone());
-            let s = s.clone();
-            let s_out = Stream::downgrade(&data.stream);
-            IsNode::add_update_dependencies(node, vec![s.gc_node().clone()]);
+            IsNode::add_dependency(&data.stream, s.clone());
+            IsNode::add_update_dependencies(&data.stream, vec![s.gc_node().clone()]);
             {
-                let mut node_update = node.data.update.write().unwrap();
+                let s = s.clone();
+                let s_out = Stream::downgrade(&data.stream);
+                let mut node_update = data.stream.data().update.write().unwrap();
                 *node_update = Box::new(move || {
                     s.with_firing_op(|firing_op: &mut Option<A>| {
                         if let Some(ref firing) = firing_op {

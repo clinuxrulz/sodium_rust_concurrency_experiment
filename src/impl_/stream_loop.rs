@@ -85,7 +85,7 @@ impl<A:Clone+Send+'static> StreamLoop<A> {
             }
             data.looped = true;
             IsNode::add_dependency(&data.stream, s.clone());
-            IsNode::add_update_dependencies(&data.stream, vec![s.gc_node().clone()]);
+            IsNode::add_update_dependencies(&data.stream, vec![s.to_dep()]);
             {
                 let s = s.clone();
                 let s_out = Stream::downgrade(&data.stream);

@@ -9,7 +9,7 @@ use crate::impl_::lazy::Lazy;
 use crate::listener::Listener;
 use crate::sodium_ctx::SodiumCtx;
 use crate::stream::Stream;
-use crate::impl_::node::Node;
+use crate::Dep;
 
 pub struct Cell<A> {
     pub impl_: CellImpl<A>
@@ -34,8 +34,9 @@ impl<A:Clone+Send+'static> Cell<A> {
         self.impl_.sample_lazy()
     }
 
-    pub fn node(&self) -> Node {
-        self.impl_.node().clone()
+    // use as dependency to lambda1, lambda2, etc.
+    pub fn to_dep(&self) -> Dep {
+        self.impl_.to_dep()
     }
 
     pub fn updates(&self) -> Stream<A> {

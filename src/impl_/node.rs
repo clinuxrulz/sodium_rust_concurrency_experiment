@@ -5,6 +5,7 @@ use std::fmt;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+use crate::impl_::dep::Dep;
 use crate::impl_::gc_node::{GcNode, Tracer};
 use crate::impl_::sodium_ctx::SodiumCtx;
 
@@ -26,7 +27,7 @@ pub trait IsNode: Send + Sync {
 
 impl dyn IsNode {
 
-    pub fn add_update_dependencies(&self, update_dependencies: Vec<GcNode>) {
+    pub fn add_update_dependencies(&self, update_dependencies: Vec<Dep>) {
         let mut update_dependencies2 = self.data().update_dependencies.write().unwrap();
         for dep in update_dependencies {
             update_dependencies2.push(dep);
@@ -139,7 +140,7 @@ pub struct NodeData {
     pub visited: RwLock<bool>,
     pub changed: RwLock<bool>,
     pub update: RwLock<Box<dyn FnMut()+Send+Sync>>,
-    pub update_dependencies: RwLock<Vec<GcNode>>,
+    pub update_dependencies: RwLock<Vec<Dep>>,
     pub dependencies: RwLock<Vec<Box<dyn IsNode+Send+Sync>>>,
     pub dependents: RwLock<Vec<Box<dyn IsWeakNode+Send+Sync>>>,
     pub keep_alive: RwLock<Vec<GcNode>>,
@@ -266,7 +267,7 @@ impl Node {
                     {
                         let update_dependencies = node_data.update_dependencies.read().unwrap();
                         for update_dependency in &*update_dependencies {
-                            tracer(update_dependency);
+                            tracer(update_dependency.gc_node());
                         }
                     }
                     {

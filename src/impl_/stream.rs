@@ -1,5 +1,5 @@
 use crate::impl_::cell::Cell;
-use crate::impl_::gc_node::{GcNode, Tracer};
+use crate::impl_::dep::Dep;
 use crate::impl_::node::{Node, WeakNode, IsNode, IsWeakNode, box_clone_vec_is_node};
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
@@ -118,6 +118,10 @@ impl<A> Stream<A> {
         self.with_data(|data: &mut StreamData<A>| k(&mut data.firing_op))
     }
 
+    pub fn to_dep(&self) -> Dep {
+        Dep::new(self.node().gc_node.clone())
+    }
+
     pub fn node(&self) -> &Node {
         &self.node
     }
@@ -207,7 +211,7 @@ impl<A:Send+'static> Stream<A> {
     pub fn snapshot<B:Send+Clone+'static,C:Send+'static,FN:IsLambda2<A,B,C>+Send+Sync+'static>(&self, cb: &Cell<B>, mut f: FN) -> Stream<C> {
         let cb = cb.clone();
         let mut f_deps = lambda2_deps(&f);
-        f_deps.push(cb.node().gc_node().clone());
+        f_deps.push(Dep::new(cb.node().gc_node().clone()));
         self.map(lambda1(move |a: &A| f.call(a, &cb.sample()), f_deps))
     }
 
@@ -235,7 +239,7 @@ impl<A:Send+'static> Stream<A> {
                     vec![self.box_clone()]
                 );
                 IsNode::add_update_dependencies(&node, f_deps);
-                IsNode::add_update_dependencies(&node, vec![self.gc_node().clone()]);
+                IsNode::add_update_dependencies(&node, vec![self.to_dep()]);
                 node
             }
         )
@@ -262,7 +266,7 @@ impl<A:Send+'static> Stream<A> {
                     vec![self.box_clone()]
                 );
                 IsNode::add_update_dependencies(&node, pred_deps);
-                IsNode::add_update_dependencies(&node, vec![self.gc_node().clone()]);
+                IsNode::add_update_dependencies(&node, vec![self.to_dep()]);
                 node
             }
         )
@@ -277,6 +281,7 @@ impl<A:Send+'static> Stream<A> {
         let s2 = s2.clone();
         let s2_node = s2.box_clone();
         let s2_gc_node = s2.gc_node().clone();
+        let s2_dep = s2.to_dep();
         let sodium_ctx = self.sodium_ctx().clone();
         Stream::_new(
             &sodium_ctx,
@@ -305,7 +310,7 @@ impl<A:Send+'static> Stream<A> {
                     vec![self.box_clone(), s2_node]
                 );
                 IsNode::add_update_dependencies(&node, f_deps);
-                IsNode::add_update_dependencies(&node, vec![self.gc_node().clone(), s2_gc_node]);
+                IsNode::add_update_dependencies(&node, vec![self.to_dep(), s2_dep]);
                 node
             }
         )
@@ -407,7 +412,7 @@ impl<A:Send+'static> Stream<A> {
                     },
                     vec![self.box_clone()]
                 );
-                IsNode::add_update_dependencies(&node, vec![self.gc_node().clone()]);
+                IsNode::add_update_dependencies(&node, vec![self.to_dep()]);
                 node
             }
         )
@@ -428,7 +433,7 @@ impl<A:Send+'static> Stream<A> {
                 },
                 vec![self.box_clone()]
             );
-        IsNode::add_update_dependencies(&node, vec![self.gc_node().clone()]);
+        IsNode::add_update_dependencies(&node, vec![self.to_dep()]);
         Listener::new(&self.sodium_ctx(), weak, node)
     }
 

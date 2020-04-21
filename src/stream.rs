@@ -1,7 +1,6 @@
 use crate::cell::Cell;
-use crate::impl_::gc_node::GcNode;
+use crate::impl_::dep::Dep;
 use crate::impl_::stream::Stream as StreamImpl;
-use crate::impl_::node::Node;
 use crate::impl_::lambda::IsLambda1;
 use crate::impl_::lambda::IsLambda2;
 use crate::impl_::lambda::IsLambda3;
@@ -36,8 +35,8 @@ impl<A:Clone+Send+'static> Stream<A> {
     }
 
     // use as dependency to lambda1, lambda2, etc.
-    pub fn node(&self) -> Node {
-        self.impl_.node().clone()
+    pub fn to_dep(&self) -> Dep {
+        self.impl_.to_dep()
     }
 
     pub fn snapshot<B:Clone+Send+'static,C:Clone+Send+'static,FN:IsLambda2<A,B,C>+Send+Sync+'static>(&self, cb: &Cell<B>, f: FN) -> Stream<C> {
@@ -49,7 +48,7 @@ impl<A:Clone+Send+'static> Stream<A> {
     }
 
     pub fn snapshot3<B:Send+Clone+'static,C:Send+Clone+'static,D:Send+Clone+'static,FN:IsLambda3<A,B,C,D>+Send+Sync+'static>(&self, cb: &Cell<B>, cc: &Cell<C>, mut f: FN) -> Stream<D> {
-        let deps: Vec<GcNode>;
+        let deps: Vec<Dep>;
         if let Some(deps2) = f.deps_op() {
             deps = deps2.clone();
         } else {
@@ -89,7 +88,7 @@ impl<A:Clone+Send+'static> Stream<A> {
 
     pub fn gate(&self, cpred: &Cell<bool>) -> Stream<A> {
         let cpred = cpred.clone();
-        let cpred_dep = cpred.impl_.node().gc_node.clone();
+        let cpred_dep = cpred.to_dep();
         self.filter(lambda1(move |_: &A| cpred.sample(), vec![cpred_dep]))
     }
 

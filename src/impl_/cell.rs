@@ -1,7 +1,7 @@
-use crate::impl_::gc_node::{GcNode, Tracer};
+use crate::impl_::dep::Dep;
 use crate::impl_::lazy::Lazy;
 use crate::impl_::listener::Listener;
-use crate::impl_::node::{Node, WeakNode, IsNode, IsWeakNode, box_clone_vec_is_node};
+use crate::impl_::node::{Node, WeakNode, IsNode};
 use crate::impl_::sodium_ctx::SodiumCtx;
 use crate::impl_::sodium_ctx::SodiumCtxData;
 use crate::impl_::stream::Stream;
@@ -96,6 +96,10 @@ impl<A> Cell<A> {
         self.with_data(|data: &mut CellData<A>| data.stream.sodium_ctx())
     }
 
+    pub fn to_dep(&self) -> Dep {
+        Dep::new(self.node().gc_node.clone())
+    }
+
     pub fn node(&self) -> &Node {
         &self.node
     }
@@ -141,6 +145,7 @@ impl<A:Send+'static> Cell<A> {
             let c = c_forward_ref.clone();
             let stream_node = stream.box_clone();
             let stream_gc_node = stream.gc_node().clone();
+            let stream_dep = stream.to_dep();
             let sodium_ctx2 = sodium_ctx.clone();
             node = Node::new(
                 &sodium_ctx2,
@@ -172,7 +177,7 @@ impl<A:Send+'static> Cell<A> {
                 vec![stream_node]
             );
             // Hack: Add stream gc node twice, because one is kepted in the cell_data for Cell::update() to return.
-            IsNode::add_update_dependencies(&node, vec![stream_gc_node.clone(), stream_gc_node]);
+            IsNode::add_update_dependencies(&node, vec![stream_dep.clone(), stream_dep]);
         }
         let c = Cell {
             data: cell_data,
@@ -390,6 +395,7 @@ impl<A:Send+'static> Cell<A> {
                 let node2: Node;
                 let csa_updates = csa.updates();
                 let csa_updates_node = csa_updates.box_clone();
+                let csa_updates_dep = csa_updates.to_dep();
                 {
                     let node1: Node = node1.clone();
                     let sodium_ctx = sodium_ctx.clone();
@@ -416,7 +422,7 @@ impl<A:Send+'static> Cell<A> {
                         vec![csa_updates_node.box_clone()]
                     );
                 }
-                IsNode::add_update_dependencies(&node2, vec![csa_updates_node.gc_node().clone(), node1.gc_node().clone()]);
+                IsNode::add_update_dependencies(&node2, vec![csa_updates_dep, Dep::new(node1.gc_node().clone())]);
                 IsNode::add_dependency(&node1, node2.clone());
                 return node1;
             }
@@ -487,7 +493,7 @@ impl<A:Send+'static> Cell<A> {
                         });
                     };
                 }
-                IsNode::add_update_dependencies(&node1, vec![node1.gc_node.clone(), node2.gc_node.clone()]);
+                IsNode::add_update_dependencies(&node1, vec![Dep::new(node1.gc_node.clone()), Dep::new(node2.gc_node.clone())]);
                 {
                     let mut update = node1.data.update.write().unwrap();
                     *update = Box::new(node1_update);

@@ -171,7 +171,8 @@ impl<A:Send+'static> Cell<A> {
                 },
                 vec![stream_node]
             );
-            IsNode::add_update_dependencies(&node, vec![stream_gc_node]);
+            // Hack: Add stream gc node twice, because one is kepted in the cell_data for Cell::update() to return.
+            IsNode::add_update_dependencies(&node, vec![stream_gc_node.clone(), stream_gc_node]);
         }
         let c = Cell {
             data: cell_data,

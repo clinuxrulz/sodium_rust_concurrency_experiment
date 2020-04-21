@@ -35,7 +35,7 @@ impl<A:Clone+Send+'static> Cell<A> {
     }
 
     pub fn node(&self) -> Node {
-        self.impl_.updates().node()
+        self.impl_.node().clone()
     }
 
     pub fn updates(&self) -> Stream<A> {
@@ -46,7 +46,7 @@ impl<A:Clone+Send+'static> Cell<A> {
         Stream { impl_: self.impl_.value() }
     }
 
-    pub fn map<B:Clone+Send+'static,FN:IsLambda1<A,B>+Send+'static>(&self, f: FN) -> Cell<B> {
+    pub fn map<B:Clone+Send+'static,FN:IsLambda1<A,B>+Send+Sync+'static>(&self, f: FN) -> Cell<B> {
         Cell { impl_: self.impl_.map(f) }
     }
 
@@ -78,11 +78,11 @@ impl<A:Clone+Send+'static> Cell<A> {
         Cell { impl_: CellImpl::switch_c(&cca.map(|ca: &Cell<A>| ca.impl_.clone()).impl_) }
     }
 
-    pub fn listen_weak<K: FnMut(&A)+Send+'static>(&self, k: K) -> Listener {
+    pub fn listen_weak<K: FnMut(&A)+Send+Sync+'static>(&self, k: K) -> Listener {
         Listener { impl_: self.impl_.listen_weak(k) }
     }
 
-    pub fn listen<K:IsLambda1<A,()>+Send+'static>(&self, k: K) -> Listener {
+    pub fn listen<K:IsLambda1<A,()>+Send+Sync+'static>(&self, k: K) -> Listener {
         Listener { impl_: self.impl_.listen(k) }
     }
 }

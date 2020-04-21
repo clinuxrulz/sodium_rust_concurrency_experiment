@@ -1,28 +1,26 @@
-use crate::impl_::stream_loop::StreamLoop;
 use crate::impl_::cell::Cell;
 use crate::impl_::lazy::Lazy;
 use crate::impl_::sodium_ctx::SodiumCtx;
+use crate::impl_::stream_loop::StreamLoop;
 
 use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
 
 pub struct CellLoop<A> {
-    pub data: Arc<Mutex<CellLoopData<A>>>
+    pub init_value_op: Arc<Mutex<Option<A>>>,
+    pub stream_loop: StreamLoop<A>,
+    pub cell: Cell<A>,
 }
 
 impl<A> Clone for CellLoop<A> {
     fn clone(&self) -> Self {
         CellLoop {
-            data: self.data.clone()
+            init_value_op: self.init_value_op.clone(),
+            stream_loop: self.stream_loop.clone(),
+            cell: self.cell.clone()
         }
     }
-}
-
-pub struct CellLoopData<A> {
-    pub stream_loop: StreamLoop<A>,
-    pub cell: Cell<A>,
-    pub init_value_op: Arc<Mutex<Option<A>>>
 }
 
 impl<A:Send+Clone+'static> CellLoop<A> {
@@ -46,30 +44,20 @@ impl<A:Send+Clone+'static> CellLoop<A> {
         let stream_loop = StreamLoop::new(sodium_ctx);
         let stream = stream_loop.stream();
         CellLoop {
-            data: Arc::new(Mutex::new(CellLoopData {
-                stream_loop: stream_loop,
-                cell: stream.hold_lazy(init_value),
-                init_value_op
-            }))
+            init_value_op: init_value_op,
+            stream_loop: stream_loop,
+            cell: stream.hold_lazy(init_value.clone()),
         }
     }
 
     pub fn cell(&self) -> Cell<A> {
-        self.with_data(|data: &mut CellLoopData<A>| data.cell.clone())
+        self.cell.clone()
     }
 
     pub fn loop_(&self, ca: &Cell<A>) {
-        self.with_data(|data: &mut CellLoopData<A>| {
-            data.stream_loop.loop_(&ca.updates());
-            let mut l = data.init_value_op.lock();
-            let init_value_op: &mut Option<A> = l.as_mut().unwrap();
-            *init_value_op = Some(ca.sample());
-        });
-    }
-
-    pub fn with_data<R,K:FnOnce(&mut CellLoopData<A>)->R>(&self, k: K) -> R {
-        let mut l = self.data.lock();
-        let data: &mut CellLoopData<A> = l.as_mut().unwrap();
-        k(data)
+        self.stream_loop.loop_(&ca.updates());
+        let mut l = self.init_value_op.lock();
+        let init_value_op: &mut Option<A> = l.as_mut().unwrap();
+        *init_value_op = Some(ca.sample());
     }
 }

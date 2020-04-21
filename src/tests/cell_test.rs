@@ -1,6 +1,7 @@
 use crate::Cell;
 use crate::SodiumCtx;
 use crate::tests::assert_memory_freed;
+use crate::tests::init;
 
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -75,6 +76,7 @@ fn constant_cell() {
 
 #[test]
 fn map_c() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     {

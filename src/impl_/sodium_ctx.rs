@@ -1,8 +1,6 @@
+use crate::impl_::gc_node::GcCtx;
 use crate::impl_::listener::Listener;
-use crate::impl_::node::Node;
-use crate::impl_::node::NodeData;
-use crate::impl_::node::NodeGcData;
-use crate::impl_::node::WeakNode;
+use crate::impl_::node::{Node, IsNode, IsWeakNode, box_clone_vec_is_node, box_clone_vec_is_weak_node};
 
 use std::mem;
 use std::sync::Arc;
@@ -11,6 +9,7 @@ use std::thread;
 
 #[derive(Clone)]
 pub struct SodiumCtx {
+    gc_ctx: GcCtx,
     data: Arc<Mutex<SodiumCtxData>>,
     node_count: Arc<Mutex<usize>>,
     node_ref_count: Arc<Mutex<usize>>,
@@ -18,16 +17,15 @@ pub struct SodiumCtx {
 }
 
 pub struct SodiumCtxData {
-    pub null_node_op: Option<Node>,
-    pub changed_nodes: Vec<Node>,
-    pub visited_nodes: Vec<Node>,
+    pub changed_nodes: Vec<Box<dyn IsNode>>,
+    pub visited_nodes: Vec<Box<dyn IsNode>>,
     pub transaction_depth: u32,
     pub pre_post: Vec<Box<dyn FnMut()+Send>>,
     pub post: Vec<Box<dyn FnMut()+Send>>,
     pub keep_alive: Vec<Listener>,
     pub collecting_cycles: bool,
     pub allow_add_roots: bool,
-    pub gc_roots: Vec<WeakNode>
+    pub allow_collect_cycles_counter: u32
 }
 
 pub struct ThreadedMode {
@@ -106,10 +104,10 @@ pub fn simple_threaded_mode() -> ThreadedMode {
 impl SodiumCtx {
     pub fn new() -> SodiumCtx {
         SodiumCtx {
+            gc_ctx: GcCtx::new(),
             data:
                 Arc::new(Mutex::new(
                     SodiumCtxData {
-                        null_node_op: None,
                         changed_nodes: Vec::new(),
                         visited_nodes: Vec::new(),
                         transaction_depth: 0,
@@ -118,7 +116,7 @@ impl SodiumCtx {
                         keep_alive: Vec::new(),
                         collecting_cycles: false,
                         allow_add_roots: true,
-                        gc_roots: Vec::new()
+                        allow_collect_cycles_counter: 0
                     }
                 )),
             node_count: Arc::new(Mutex::new(0)),
@@ -127,23 +125,12 @@ impl SodiumCtx {
         }
     }
 
-    pub fn null_node(&self) -> Node {
-        self.with_data(|data: &mut SodiumCtxData| {
-            if let Some(ref null_node) = data.null_node_op {
-                return null_node.clone();
-            }
-            let null_node = Node::new(self, || {}, Vec::new());
-            // Do not include null_node against total node count
-            self.dec_node_ref_count();
-            self.dec_node_count();
-            //
-            data.null_node_op = Some(null_node.clone());
-            return null_node;
-        })
+    pub fn gc_ctx(&self) -> GcCtx {
+        self.gc_ctx.clone()
     }
 
-    pub fn add_gc_root(&self, node: &Node) {
-        self.with_data(|data: &mut SodiumCtxData| data.gc_roots.push(Node::downgrade(node)));
+    pub fn null_node(&self) -> Node {
+        Node::new(self, "null_node", || {}, Vec::new())
     }
 
     pub fn transaction<R,K:FnOnce()->R>(&self, k:K) -> R {
@@ -162,18 +149,15 @@ impl SodiumCtx {
         return result;
     }
 
-    pub fn add_dependents_to_changed_nodes(&self, node: Node) {
+    pub fn add_dependents_to_changed_nodes(&self, node: &dyn IsNode) {
         self.with_data(|data: &mut SodiumCtxData| {
-            node.with_data(|data2: &mut NodeData| {
-                data2.dependents
-                    .iter()
-                    .flat_map(|node: &WeakNode| {
-                        node.upgrade()
-                    })
-                    .for_each(|node: Node| {
-                        data.changed_nodes.push(node);
-                    });
-            });
+            let node_dependents = node.data().dependents.read().unwrap();
+            node_dependents
+                .iter()
+                .flat_map(|node: &Box<dyn IsWeakNode+Send+Sync+'static>| node.upgrade())
+                .for_each(|node: Box<dyn IsNode+Send+Sync>| {
+                    data.changed_nodes.push(node);
+                });
         });
     }
 
@@ -234,11 +218,12 @@ impl SodiumCtx {
     pub fn end_of_transaction(&self) {
         self.with_data(|data: &mut SodiumCtxData| {
             data.transaction_depth = data.transaction_depth + 1;
+            data.allow_collect_cycles_counter = data.allow_collect_cycles_counter + 1;
         });
         loop {
-            let changed_nodes: Vec<Node> =
+            let changed_nodes: Vec<Box<dyn IsNode>> =
                 self.with_data(|data: &mut SodiumCtxData| {
-                    let mut changed_nodes: Vec<Node> = Vec::new();
+                    let mut changed_nodes: Vec<Box<dyn IsNode>> = Vec::new();
                     mem::swap(&mut changed_nodes, &mut data.changed_nodes);
                     return changed_nodes;
                 });
@@ -246,7 +231,7 @@ impl SodiumCtx {
                 break;
             }
             for node in changed_nodes {
-                self.update_node(&node);
+                self.update_node(node.node());
             }
         }
         self.with_data(|data: &mut SodiumCtxData| {
@@ -272,36 +257,49 @@ impl SodiumCtx {
         for mut k in post {
             k();
         }
-        // gc
-        //self.collect_cycles()
+        let allow_collect_cycles =
+            self.with_data(|data: &mut SodiumCtxData| {
+                data.allow_collect_cycles_counter = data.allow_collect_cycles_counter - 1;
+                data.allow_collect_cycles_counter == 0
+            });
+        if allow_collect_cycles {
+            // gc
+            self.collect_cycles()
+        }
     }
 
     pub fn update_node(&self, node: &Node) {
-        let bail = node.with_data(|data: &mut NodeData| data.visited.clone());
+        let bail;
+        {
+            let mut visited = node.data.visited.write().unwrap();
+            bail = *visited;
+            *visited = true;
+        }
         if bail {
             return;
         }
-        let dependencies: Vec<Node> =
-            node.with_data(|data: &mut NodeData| {
-                data.visited = true;
-                data.dependencies.clone()
-            });
+        let dependencies: Vec<Box<dyn IsNode+Send+Sync+'static>>;
+        {
+            let dependencies2 = node.data.dependencies.read().unwrap();
+            dependencies = box_clone_vec_is_node(&*dependencies2);
+        }
         {
             let node = node.clone();
             self.pre_post(move || {
-                node.with_data(|data: &mut NodeData| data.visited = false);
+                let mut visited = node.data.visited.write().unwrap();
+                *visited = false;
             });
         }
         // visit dependencies
         let handle;
         {
-            let dependencies = dependencies.clone();
+            let dependencies = box_clone_vec_is_node(&dependencies);
             let _self = self.clone();
             handle = self.threaded_mode.spawn(move || {
                 for dependency in &dependencies {
-                    let visit_it = dependency.with_data(|data: &mut NodeData| !data.visited);
+                    let visit_it = !*dependency.data().visited.read().unwrap();
                     if visit_it {
-                        _self.update_node(dependency);
+                        _self.update_node(dependency.node());
                     }
                 }
             });
@@ -311,29 +309,21 @@ impl SodiumCtx {
         let any_changed =
             dependencies
                 .iter()
-                .any(|node: &Node| { node.with_data(|data: &mut NodeData| data.changed) });
+                .any(|node: &Box<dyn IsNode+Send+Sync+'static>| { *node.node().data().changed.read().unwrap() });
         // if dependencies changed, then execute update on current node
         if any_changed {
-            let mut update: Box<dyn FnMut()+Send> = Box::new(|| {});
-            node.with_data(|data: &mut NodeData| {
-                mem::swap(&mut update, &mut data.update);
-            });
+            let mut update = node.data.update.write().unwrap();
+            let update: &mut Box<_> = &mut *update;
             update();
-            node.with_data(|data: &mut NodeData| {
-                mem::swap(&mut update, &mut data.update);
-            });
         }
         // if self changed then update dependents
-        if node.with_data(|data: &mut NodeData| data.changed) {
-            let dependents = node.with_data(|data: &mut NodeData| {
-                data.dependents.clone()
-            });
+        if *node.data.changed.read().unwrap() {
+            let dependents = box_clone_vec_is_weak_node(&*node.data().dependents.read().unwrap());
             {
-                let dependents = dependents.clone();
                 let _self = self.clone();
                 for dependent in dependents {
                     if let Some(dependent2) = dependent.upgrade() {
-                        _self.update_node(&dependent2);
+                        _self.update_node(dependent2.node());
                     }
                 }
             }
@@ -341,115 +331,6 @@ impl SodiumCtx {
     }
 
     pub fn collect_cycles(&self) {
-        let bail =
-            self.with_data(|data: &mut SodiumCtxData| {
-                if data.collecting_cycles {
-                    return true;
-                }
-                data.collecting_cycles = true;
-                data.allow_add_roots = false;
-                return false;
-            });
-        if bail {
-            return;
-        }
-        loop {
-            let mut gc_roots: Vec<WeakNode> = Vec::new();
-            self.with_data(|data: &mut SodiumCtxData| {
-                mem::swap(&mut gc_roots, &mut data.gc_roots);
-            });
-            if gc_roots.is_empty() {
-                break;
-            }
-            for gc_root in gc_roots {
-                let gc_root_op = gc_root.upgrade();
-                if let Some(gc_root) = gc_root_op {
-                    self.gc_process_root(gc_root);
-                }
-            }
-        }
-        self.with_data(|data: &mut SodiumCtxData| {
-            data.collecting_cycles = false;
-            data.allow_add_roots = true;
-        });
-    }
-
-    pub fn gc_process_root(&self, node: Node) {
-        let mut ref_count_adj: usize = 0;
-        let mut visited: Vec<Node> = Vec::new();
-        self.gc_calc_ref_count_adj(&node, None, &mut ref_count_adj, &mut visited);
-        // "+ 1" for current reference in this method
-        let ref_count = Arc::strong_count(&node.data);
-        if ref_count == ref_count_adj + 1 {
-            self.with_data(|data: &mut SodiumCtxData| {
-                data.allow_add_roots = true;
-            });
-            self.gc_free_node(&node);
-            self.with_data(|data: &mut SodiumCtxData| {
-                data.allow_add_roots = false;
-            });
-        }
-    }
-
-    pub fn gc_calc_ref_count_adj(&self, node: &Node, at_node_op: Option<&Node>, ref_count_adj: &mut usize, visited: &mut Vec<Node>) {
-        let next_nodes: Vec<Node>;
-        if let Some(at_node) = at_node_op {
-            if Arc::ptr_eq(&node.data, &at_node.data) {
-                *ref_count_adj = *ref_count_adj + 1;
-                return;
-            }
-            let bail =
-                at_node.with_gc_data(|data: &mut NodeGcData| {
-                    if data.visited {
-                        return true;
-                    }
-                    data.visited = true;
-                    return false;
-                });
-            if bail {
-                return;
-            }
-            visited.push(at_node.clone());
-            next_nodes = at_node.with_data(|data: &mut NodeData| {
-                let mut next_nodes = data.dependencies.clone();
-                for dep in &data.update_dependencies {
-                    if let Some(dep) = dep.upgrade() {
-                        next_nodes.push(dep);
-                    }
-                }
-                for dep in &data.keep_alive {
-                    next_nodes.push(dep.clone());
-                }
-                next_nodes
-            });
-        } else {
-            next_nodes = node.with_data(|data: &mut NodeData| {
-                let mut next_nodes = data.dependencies.clone();
-                for dep in &data.update_dependencies {
-                    if let Some(dep) = dep.upgrade() {
-                        next_nodes.push(dep);
-                    }
-                }
-                for dep in &data.keep_alive {
-                    next_nodes.push(dep.clone());
-                }
-                next_nodes
-            });
-        }
-        for next_node in next_nodes {
-            self.gc_calc_ref_count_adj(node, Some(&next_node), ref_count_adj, visited);
-        }
-    }
-
-    pub fn gc_free_node(&self, node: &Node) {
-        let dependencies =
-            node.with_data(|data: &mut NodeData| {
-                data.update = Box::new(|| {});
-                data.keep_alive.clear();
-                data.dependencies.clone()
-            });
-        for dependency in dependencies {
-            node.remove_dependency(&dependency);
-        }
+        self.gc_ctx.collect_cycles();
     }
 }

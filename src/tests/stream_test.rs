@@ -6,6 +6,7 @@ use crate::SodiumCtx;
 use crate::Stream;
 use crate::StreamSink;
 use crate::tests::assert_memory_freed;
+use crate::tests::init;
 
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -40,6 +41,7 @@ fn map() {
 
 #[test]
 fn map_to() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     let l;
@@ -262,6 +264,7 @@ fn filter_option() {
 
 #[test]
 fn merge() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     {
@@ -343,6 +346,7 @@ fn loop_() {
 
 #[test]
 fn gate() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     {
@@ -410,6 +414,7 @@ fn collect() {
 
 #[test]
 fn accum() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     let l;
@@ -474,6 +479,7 @@ fn once() {
 
 #[test]
 fn defer() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     {
@@ -537,6 +543,7 @@ fn hold() {
 
 #[test]
 fn hold_is_delayed() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     {
@@ -591,7 +598,7 @@ fn switch_c() {
         let ca = ssc.stream().map(|s: &SC| s.a.clone()).filter_option().hold("A");
         let cb = ssc.stream().map(|s: &SC| s.b.clone()).filter_option().hold("a");
         let csw_str = ssc.stream().map(|s: &SC| s.sw.clone()).filter_option().hold("ca");
-        let csw_deps = vec![ca.node(), cb.node()];
+        let csw_deps = vec![ca.node().gc_node.clone(), cb.node().gc_node.clone()];
         let csw = csw_str.map(
             lambda1(
                 move |s: &&'static str|
@@ -662,7 +669,7 @@ fn switch_s() {
                 )
                 .filter_option()
                 .hold("sa");
-        let csw_deps = vec![sa.node(), sb.node()];
+        let csw_deps = vec![sa.node().gc_node.clone(), sb.node().gc_node.clone()];
         let csw: Cell<Stream<&'static str>> = csw_str.map(
             lambda1(
                 move |sw: &&'static str|
@@ -760,6 +767,7 @@ fn switch_s_simultaneous() {
 
 #[test]
 fn loop_cell() {
+    init();
     let mut sodium_ctx = SodiumCtx::new();
     let sodium_ctx = &mut sodium_ctx;
     {

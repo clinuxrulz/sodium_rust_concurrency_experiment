@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 mod impl_;
 mod cell;
 mod cell_loop;
